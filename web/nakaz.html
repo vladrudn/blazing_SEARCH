@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blazing Search</title>
+    <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+<div class="container">
+
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Введіть текст для пошуку (мінімум 3 символи)..." autofocus>
+        <div class="view-mode-toggle">
+            <label class="toggle-option">
+                <input type="radio" name="view-mode" value="fragments" checked>
+                <span>Витяг</span>
+            </label>
+            <label class="toggle-option">
+                <input type="radio" name="view-mode" value="full-document">
+                <span>Повний документ</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="info-panel" id="info-panel" style="display: none;">
+        <div id="search-stats"></div>
+        <div id="processing-time"></div>
+    </div>
+
+    <div id="loader" class="hidden">
+        <div class="spinner"></div>
+        <p>Виконується пошук...</p>
+    </div>
+
+    <div id="results-container" class="hidden">
+        <div class="split-view">
+            <div class="file-list-panel">
+                <div id="files-list"></div>
+                <div id="lazy-loading-indicator" class="lazy-loading-indicator hidden">
+                    <div class="small-spinner"></div>
+                    <span>Пошук решти результатів...</span>
+                </div>
+            </div>
+            <div class="content-preview-panel">
+                <div id="document-preview"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="error-message" class="hidden"></div>
+</div>
+
+<script src="/static/app.js?v=3"></script>
+<script src="/static/auto-reload.js"></script>
+</body>
+</html>

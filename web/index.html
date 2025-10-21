@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>СТРОЙОВА/ПЕРСОНАЛ - 115 ОМБр</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+        }
+        .main-container {
+            background-image:
+                    radial-gradient(circle at 15% 50%, rgba(251, 146, 60, 0.1), transparent 40%),
+                    radial-gradient(circle at 85% 30%, rgba(249, 115, 22, 0.1), transparent 40%);
+        }
+        .card {
+            background-color: rgba(31, 41, 55, 0.5); /* bg-gray-800 with opacity */
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(75, 85, 99, 0.5); /* border-gray-600 with opacity */
+            transition: all 0.3s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #f97316; /* orange-500 */
+            box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.2);
+        }
+        .card-icon {
+            transition: transform 0.3s ease-in-out;
+        }
+        .card:hover .card-icon {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+
+<div class="main-container min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+
+    <!-- Header -->
+    <header class="text-center mb-10 md:mb-16">
+        <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-wider">
+            СТРОЙОВА<span class="text-orange-500">/</span>ПЕРСОНАЛ
+        </h1>
+        <p class="mt-3 text-lg sm:text-xl font-medium text-gray-400">
+            115 Окрема механізована бригада
+        </p>
+        <p class="mt-1 text-orange-400 text-md sm:text-lg animate-pulse">
+            🔥 Народжена вогнем 🔥
+        </p>
+    </header>
+
+    <!-- Navigation Tiles Grid -->
+    <main class="w-full max-w-6xl">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+
+            <!-- Tile 1: Штатка -->
+            <a href="#" class="card group rounded-xl p-6 flex flex-col items-center text-center">
+                <div class="card-icon bg-orange-500/10 p-4 rounded-full mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">Штатка</h2>
+                <p class="text-gray-400 text-sm">Перегляд та керування штатним розписом підрозділів.</p>
+            </a>
+
+            <!-- Tile 2: Пошук по наказам -->
+            <a href="#" class="card group rounded-xl p-6 flex flex-col items-center text-center">
+                <div class="card-icon bg-orange-500/10 p-4 rounded-full mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        <path d="M15 11h-4"></path>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">Пошук по наказам</h2>
+                <p class="text-gray-400 text-sm">Швидкий доступ та пошук у базі даних наказів.</p>
+            </a>
+
+            <!-- Tile 3: СЕДО -->
+            <a href="#" class="card group rounded-xl p-6 flex flex-col items-center text-center">
+                <div class="card-icon bg-orange-500/10 p-4 rounded-full mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">СЕДО</h2>
+                <p class="text-gray-400 text-sm">Система електронного документообігу та звітності.</p>
+            </a>
+
+            <!-- Tile 4: Журнали рапортів -->
+            <a href="#" class="card group rounded-xl p-6 flex flex-col items-center text-center">
+                <div class="card-icon bg-orange-500/10 p-4 rounded-full mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        <line x1="12" y1="8" x2="16" y2="8"></line>
+                        <line x1="12" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">Журнали рапортів</h2>
+                <p class="text-gray-400 text-sm">Облік, реєстрація та контроль виконання рапортів.</p>
+            </a>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center mt-10 md:mt-16">
+        <p class="text-gray-500 text-sm">&copy; 2025 ||| Розроблено @VladRudn для 115 ОМБр</p>
+    </footer>
+</div>
+
+</body>
+</html>
