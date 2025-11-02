@@ -22,6 +22,7 @@ pub struct ParagraphInfo {
     pub calculated_number: Option<String>,
     #[allow(dead_code)]
     pub original_text: String,
+    pub line_breaks_after: usize, // Кількість порожніх рядків після параграфа
 }
 
 impl ParagraphInfo {
@@ -33,6 +34,7 @@ impl ParagraphInfo {
             level: None,
             has_numbering: false,
             calculated_number: None,
+            line_breaks_after: 0,
         }
     }
 
@@ -49,6 +51,7 @@ impl ParagraphInfo {
             level: Some(level),
             has_numbering: true,
             calculated_number: Some(calculated_number),
+            line_breaks_after: 0,
         }
     }
 }
@@ -118,6 +121,11 @@ impl DocxParser {
     pub fn parse(&mut self) -> Result<Vec<String>, String> {
         let paragraphs_info = self.extract_hierarchical_numbering()?;
         Ok(self.format_paragraphs(paragraphs_info))
+    }
+
+    pub fn parse_with_structure(&mut self) -> Result<Vec<crate::document_record::Paragraph>, String> {
+        let paragraphs_info = self.extract_hierarchical_numbering()?;
+        Ok(self.format_paragraphs_with_structure(paragraphs_info))
     }
 
     fn open_docx(&mut self) -> Result<(String, Option<String>), String> {
@@ -264,7 +272,7 @@ impl DocxParser {
         let mut reader = Reader::from_str(&doc_xml);
 
         let mut buf = Vec::new();
-        let mut result = Vec::new();
+        let mut result: Vec<ParagraphInfo> = Vec::new();
         let mut current_numbering = CurrentNumbering::default();
         let mut last_main_point = 0;
 
@@ -273,6 +281,7 @@ impl DocxParser {
         let mut paragraph_text = String::new();
         let mut paragraph_style = None;
         let mut paragraph_num_pr = None;
+        let mut empty_paragraphs_count = 0; // Лічильник порожніх параграфів підряд
 
         loop {
             match reader.read_event_into(&mut buf) {
@@ -323,11 +332,19 @@ impl DocxParser {
                         in_paragraph = false;
 
                         let raw_text = paragraph_text.trim().to_string();
-                        if raw_text.is_empty() || self.should_skip_text(&raw_text) {
+
+                        // Якщо параграф порожній - збільшуємо лічильник порожніх параграфів
+                        if raw_text.is_empty() {
+                            empty_paragraphs_count += 1;
                             continue;
                         }
 
-                        let paragraph_info = self.process_paragraph(
+                        // Пропускаємо технічні тексти
+                        if self.should_skip_text(&raw_text) {
+                            continue;
+                        }
+
+                        let mut paragraph_info = self.process_paragraph(
                             raw_text,
                             paragraph_style.clone(),
                             paragraph_num_pr.clone(),
@@ -335,11 +352,19 @@ impl DocxParser {
                             &mut last_main_point,
                         );
 
-                        if let Some(info) = paragraph_info {
+                        if let Some(ref mut info) = paragraph_info {
                             if info.level == Some(1) {
                                 last_main_point = current_numbering.level_1;
                             }
-                            result.push(info);
+
+                            // Якщо були порожні параграфи перед цим - зберігаємо попередній параграф з розривами
+                            if empty_paragraphs_count > 0 && !result.is_empty() {
+                                let last_idx = result.len() - 1;
+                                result[last_idx].line_breaks_after = empty_paragraphs_count;
+                                empty_paragraphs_count = 0;
+                            }
+
+                            result.push(info.clone());
                         }
                     }
                 }
@@ -567,10 +592,89 @@ impl DocxParser {
 
         final_result
     }
+
+    fn format_paragraphs_with_structure(&self, paragraphs_info: Vec<ParagraphInfo>) -> Vec<crate::document_record::Paragraph> {
+        use crate::document_record::Paragraph;
+
+        let mut result = Vec::new();
+        let mut current_section = String::new();
+        let mut current_line_breaks = 0;
+
+        for p_info in paragraphs_info {
+            let formatted_text = if p_info.has_numbering {
+                if let Some(calculated_number) = p_info.calculated_number {
+                    format!("{}{}", calculated_number, p_info.text)
+                } else {
+                    p_info.text
+                }
+            } else {
+                p_info.text
+            };
+
+            // Якщо це новий нумерований розділ (має numbering)
+            if p_info.has_numbering {
+                // Зберігаємо попередній розділ якщо він не порожній
+                if !current_section.is_empty() {
+                    result.push(Paragraph::with_breaks(
+                        current_section.trim().to_string(),
+                        current_line_breaks
+                    ));
+                    current_section.clear();
+                }
+
+                // Починаємо новий розділ
+                current_section = formatted_text;
+                current_line_breaks = p_info.line_breaks_after;
+            } else {
+                // Це звичайний текст - додаємо до поточного розділу з переносом рядка
+                if !current_section.is_empty() {
+                    current_section.push('\n');
+                }
+                current_section.push_str(&formatted_text);
+                current_line_breaks = p_info.line_breaks_after;
+            }
+        }
+
+        // Додаємо останній розділ
+        if !current_section.is_empty() {
+            result.push(Paragraph::with_breaks(
+                current_section.trim().to_string(),
+                current_line_breaks
+            ));
+        }
+
+        // Розділяємо параграфи що містять '\n' на окремі параграфи
+        let mut final_result = Vec::new();
+        for paragraph in result {
+            if paragraph.text.contains('\n') {
+                let parts: Vec<&str> = paragraph.text.split('\n').collect();
+                let parts_len = parts.len();
+
+                for (i, part) in parts.iter().enumerate() {
+                    let trimmed_part = part.trim();
+                    if !trimmed_part.is_empty() {
+                        // Тільки останній розділений параграф отримує line_breaks_after
+                        let breaks = if i == parts_len - 1 { paragraph.line_breaks_after } else { 0 };
+                        final_result.push(Paragraph::with_breaks(trimmed_part.to_string(), breaks));
+                    }
+                }
+            } else {
+                final_result.push(paragraph);
+            }
+        }
+
+        final_result
+    }
 }
 
 // Публічна функція для парсингу
 pub fn parse_docx(doc_path: &str) -> Result<Vec<String>, String> {
     let mut parser = DocxParser::new(doc_path.to_string());
     parser.parse()
+}
+
+// Публічна функція для парсингу з збереженням структури
+pub fn parse_docx_with_structure(doc_path: &str) -> Result<Vec<crate::document_record::Paragraph>, String> {
+    let mut parser = DocxParser::new(doc_path.to_string());
+    parser.parse_with_structure()
 }

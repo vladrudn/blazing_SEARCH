@@ -151,13 +151,14 @@ impl SearchEngine {
             for (doc_idx, paragraph_positions) in candidates {
                 if doc_idx < data.index.documents.len() {
                     let document = &data.index.documents[doc_idx];
+                    let paragraphs = document.get_paragraphs();
                     let mut document_matches = Vec::new();
 
                     // Перевіряємо тільки ті параграфи, які є в позиціях
                     for &pos in &paragraph_positions {
-                        if pos < document.content.len() {
-                            let paragraph = &document.content[pos];
-                            let paragraph_lower = paragraph.to_lowercase();
+                        if pos < paragraphs.len() {
+                            let paragraph = &paragraphs[pos];
+                            let paragraph_lower = paragraph.text.to_lowercase();
 
                             // Пропускаємо параграфи які починаються з "Підстава" тільки в режимі "Витяг"
                             if view_mode == Some("fragments")
@@ -186,7 +187,7 @@ impl SearchEngine {
                                 if proximity_check {
                                     // Знайдений параграф з персоною завжди додаємо (фільтрація наступних параграфів буде в JS)
                                     document_matches.push(SearchEngineMatch {
-                                        context: paragraph.clone(),
+                                        context: paragraph.text.clone(),
                                         position: pos,
                                     });
                                 }
@@ -195,11 +196,16 @@ impl SearchEngine {
                     }
 
                     if !document_matches.is_empty() {
+                        // Конвертуємо параграфи в текст для зворотної сумісності
+                        let all_paragraphs_text: Vec<String> = paragraphs.iter()
+                            .map(|p| p.text.clone())
+                            .collect();
+
                         results.push(SearchEngineResult {
                             file_name: document.file_name.clone(),
                             file_path: document.file_path.clone(),
                             matches: document_matches,
-                            all_paragraphs: document.content.clone(),
+                            all_paragraphs: all_paragraphs_text,
                             file_size: document.file_size,
                             last_modified: document.last_modified,
                         });
@@ -210,11 +216,12 @@ impl SearchEngine {
             println!("⚠️  Інвертований індекс не доступний, використовуємо звичайний пошук");
             // Звичайний пошук як резервний варіант
             for document in data.index.documents.iter() {
+                let paragraphs = document.get_paragraphs();
                 let mut document_matches = Vec::new();
                 let mut has_any_match = false;
 
-                for (pos, paragraph) in document.content.iter().enumerate() {
-                    let paragraph_lower = paragraph.to_lowercase();
+                for (pos, paragraph) in paragraphs.iter().enumerate() {
+                    let paragraph_lower = paragraph.text.to_lowercase();
 
                     // Пропускаємо параграфи які починаються з "Підстава" тільки в режимі "Витяг"
                     if view_mode == Some("fragments")
@@ -239,7 +246,7 @@ impl SearchEngine {
                         if proximity_check {
                             // Знайдений параграф з персоною завжди додаємо (фільтрація наступних параграфів буде в JS)
                             document_matches.push(SearchEngineMatch {
-                                context: paragraph.clone(),
+                                context: paragraph.text.clone(),
                                 position: pos,
                             });
                             has_any_match = true;
@@ -248,11 +255,16 @@ impl SearchEngine {
                 }
 
                 if has_any_match {
+                    // Конвертуємо параграфи в текст для зворотної сумісності
+                    let all_paragraphs_text: Vec<String> = paragraphs.iter()
+                        .map(|p| p.text.clone())
+                        .collect();
+
                     results.push(SearchEngineResult {
                         file_name: document.file_name.clone(),
                         file_path: document.file_path.clone(),
                         matches: document_matches,
-                        all_paragraphs: document.content.clone(),
+                        all_paragraphs: all_paragraphs_text,
                         file_size: document.file_size,
                         last_modified: document.last_modified,
                     });

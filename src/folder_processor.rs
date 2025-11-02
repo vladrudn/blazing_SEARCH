@@ -2,7 +2,7 @@ use std::path::Path;
 use walkdir::{WalkDir, DirEntry};
 use regex::Regex;
 use once_cell::sync::Lazy;
-use crate::docx_parser::parse_docx;
+use crate::docx_parser::parse_docx_with_structure;
 use crate::document_record::{DocumentRecord, DocumentIndex};
 
 // Регулярний вираз для пошуку дати у форматі DD.MM.YYYY
@@ -348,8 +348,9 @@ impl FolderProcessor {
     }
 
     fn process_docx_file(&self, file_path: &str) -> Result<DocumentRecord, String> {
-        let content = parse_docx(file_path)?;
-        DocumentRecord::new(file_path.to_string(), content)
+        // Використовуємо новий парсер зі збереженням структури
+        let paragraphs = parse_docx_with_structure(file_path)?;
+        DocumentRecord::new_with_paragraphs(file_path.to_string(), paragraphs)
     }
 
     fn should_skip_entry_static(entry: &DirEntry, excluded_folders: &[&str]) -> bool {

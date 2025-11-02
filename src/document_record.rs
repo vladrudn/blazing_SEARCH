@@ -5,13 +5,39 @@ use std::time::SystemTime;
 use std::io::{BufReader, BufWriter};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Paragraph {
+    pub text: String,
+    #[serde(default)]
+    pub line_breaks_after: usize, // Кількість порожніх рядків після параграфа (0 = немає розриву, 1 = один порожній рядок)
+}
+
+impl Paragraph {
+    pub fn new(text: String) -> Self {
+        Self {
+            text,
+            line_breaks_after: 0,
+        }
+    }
+
+    pub fn with_breaks(text: String, line_breaks_after: usize) -> Self {
+        Self {
+            text,
+            line_breaks_after,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentRecord {
     pub file_path: String,
     pub file_name: String,
     pub file_size: u64,
     pub last_modified: u64, // Unix timestamp
     pub created: u64,       // Unix timestamp
-    pub content: Vec<String>,
+    #[serde(default)]
+    pub content: Vec<String>, // Deprecated: залишаємо для зворотної сумісності
+    #[serde(default)]
+    pub paragraphs: Vec<Paragraph>, // Нова структура з інформацією про розриви
     pub word_count: usize,
     pub paragraph_count: usize,
 }
@@ -20,6 +46,18 @@ impl DocumentRecord {
     pub fn new(
         file_path: String,
         content: Vec<String>,
+    ) -> Result<Self, String> {
+        // Конвертуємо старий формат в новий
+        let paragraphs: Vec<Paragraph> = content.iter()
+            .map(|text| Paragraph::new(text.clone()))
+            .collect();
+
+        Self::new_with_paragraphs(file_path, paragraphs)
+    }
+
+    pub fn new_with_paragraphs(
+        file_path: String,
+        paragraphs: Vec<Paragraph>,
     ) -> Result<Self, String> {
         let path = Path::new(&file_path);
 
@@ -43,11 +81,16 @@ impl DocumentRecord {
             .unwrap_or_default()
             .as_secs();
 
-        let word_count = content.iter()
-            .map(|paragraph| paragraph.split_whitespace().count())
+        let word_count = paragraphs.iter()
+            .map(|p| p.text.split_whitespace().count())
             .sum();
 
-        let paragraph_count = content.len();
+        let paragraph_count = paragraphs.len();
+
+        // Зберігаємо також старий формат для зворотної сумісності
+        let content: Vec<String> = paragraphs.iter()
+            .map(|p| p.text.clone())
+            .collect();
 
         Ok(DocumentRecord {
             file_path,
@@ -56,9 +99,31 @@ impl DocumentRecord {
             last_modified,
             created,
             content,
+            paragraphs,
             word_count,
             paragraph_count,
         })
+    }
+
+    /// Повертає текст параграфа за індексом (для зворотної сумісності)
+    pub fn get_paragraph_text(&self, index: usize) -> Option<&str> {
+        if !self.paragraphs.is_empty() {
+            self.paragraphs.get(index).map(|p| p.text.as_str())
+        } else {
+            self.content.get(index).map(|s| s.as_str())
+        }
+    }
+
+    /// Повертає всі параграфи (мігрує зі старого формату якщо потрібно)
+    pub fn get_paragraphs(&self) -> Vec<Paragraph> {
+        if !self.paragraphs.is_empty() {
+            self.paragraphs.clone()
+        } else {
+            // Міграція зі старого формату
+            self.content.iter()
+                .map(|text| Paragraph::new(text.clone()))
+                .collect()
+        }
     }
 }
 
