@@ -29,12 +29,19 @@ pub struct SearchResponse {
 }
 
 #[derive(Serialize, Clone)]
+pub struct ParagraphData {
+    pub text: String,
+    #[serde(default)]
+    pub line_breaks_after: usize,
+}
+
+#[derive(Serialize, Clone)]
 pub struct SearchResult {
     pub file_name: String,
     pub file_path: String,
     pub full_path: String,
     pub matches: Vec<MatchInfo>,
-    pub all_paragraphs: Vec<String>,
+    pub all_paragraphs: Vec<ParagraphData>,
     pub file_size: u64,
     pub last_modified: u64,
 }
@@ -103,7 +110,10 @@ pub async fn search_handler(
                 context: m.context,
                 position: m.position,
             }).collect(),
-            all_paragraphs: r.all_paragraphs,
+            all_paragraphs: r.all_paragraphs.into_iter().map(|p| ParagraphData {
+                text: p.text,
+                line_breaks_after: p.line_breaks_after,
+            }).collect(),
             file_size: r.file_size,
             last_modified: r.last_modified,
         }

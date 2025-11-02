@@ -9,6 +9,11 @@ const infoPanel = document.getElementById('info-panel');
 const loader = document.getElementById('loader');
 const errorMessage = document.getElementById('error-message');
 
+// Helper функція для отримання тексту параграфа (підтримка старого і нового формату)
+function getParagraphText(paragraphData) {
+    return typeof paragraphData === 'string' ? paragraphData : paragraphData.text;
+}
+
 // Клас для копіювання шляхів файлів у буфер обміну
 class FilePathCopier {
     constructor() {
@@ -768,7 +773,7 @@ function showAllExtracts(query) {
                 if (isPersonalFile) {
                     // Для файлів "особовий" шукаємо батьківський параграф з §
                     for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         if (paragraph.startsWith('§')) {
                             parentParagraphs = [paragraph];
                             break;
@@ -817,7 +822,7 @@ function showAllExtracts(query) {
                     // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
                     let isBlocked = false;
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.startsWith('§')) {
                             // Знайшли наступний § - зупиняємось
@@ -847,7 +852,7 @@ function showAllExtracts(query) {
                     }
                     
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.toLowerCase().startsWith('підстава')) {
                             basisParagraph = paragraph;
@@ -934,7 +939,7 @@ function appendExtracts(newResults, query) {
                 if (isPersonalFile) {
                     // Для файлів "особовий" шукаємо батьківський параграф з §
                     for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         if (paragraph.startsWith('§')) {
                             parentParagraphs = [paragraph];
                             break;
@@ -983,7 +988,7 @@ function appendExtracts(newResults, query) {
                     // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
                     let isBlocked = false;
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.startsWith('§')) {
                             // Знайшли наступний § - зупиняємось
@@ -1013,7 +1018,7 @@ function appendExtracts(newResults, query) {
                     }
                     
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.toLowerCase().startsWith('підстава')) {
                             basisParagraph = paragraph;
@@ -1128,7 +1133,11 @@ function selectFile(fileIndex, query) {
     });
 
     if (viewMode === 'full-document' && file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-        file.all_paragraphs.forEach((text, index) => {
+        file.all_paragraphs.forEach((paragraphData, index) => {
+            // Підтримка старого і нового формату
+            const text = typeof paragraphData === 'string' ? paragraphData : paragraphData.text;
+            const lineBreaksAfter = typeof paragraphData === 'object' ? (paragraphData.line_breaks_after || 0) : 0;
+
             if (!text.trim()) {
                 // Додаємо порожній рядок як переніс
                 const emptyLine = document.createElement('div');
@@ -1163,6 +1172,13 @@ function selectFile(fileIndex, query) {
 
             documentContent.appendChild(paragraph);
             paragraphCount++;
+
+            // Додаємо розриви рядків після параграфа якщо вони є
+            for (let i = 0; i < lineBreaksAfter; i++) {
+                const emptyLine = document.createElement('div');
+                emptyLine.style.height = '1.2em';
+                documentContent.appendChild(emptyLine);
+            }
         });
     } else {
         // Режим фрагментів - показуємо знайдені фрагменти з батьківськими параграфами
@@ -1186,7 +1202,7 @@ function selectFile(fileIndex, query) {
                 if (isPersonalFile) {
                     // Для файлів "особовий" шукаємо батьківський параграф з §
                     for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         if (paragraph.startsWith('§')) {
                             parentParagraphs = [paragraph];
                             break;
@@ -1235,7 +1251,7 @@ function selectFile(fileIndex, query) {
                     // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
                     let isBlocked = false;
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.startsWith('§')) {
                             // Знайшли наступний § - зупиняємось
@@ -1266,7 +1282,7 @@ function selectFile(fileIndex, query) {
                     
                     // Шукаємо параграфи після основного тексту
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = file.all_paragraphs[i].trim();
+                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
                         
                         if (paragraph.toLowerCase().startsWith('підстава')) {
                             // Знайшли підставу
@@ -1482,19 +1498,19 @@ function getParentParagraphs(allParagraphs, matchPosition) {
     if (!allParagraphs || matchPosition < 0 || matchPosition >= allParagraphs.length) {
         return [];
     }
-    
+
     const parentParagraphs = [];
-    const currentParagraph = allParagraphs[matchPosition].trim();
-    
+    const currentParagraph = getParagraphText(allParagraphs[matchPosition]).trim();
+
     // Визначаємо рівень поточного параграфу
     let currentLevel = 999; // Якщо це не заголовок, шукаємо всі батьківські заголовки
     if (isHierarchyHeader(currentParagraph)) {
         currentLevel = getHierarchyLevel(currentParagraph);
     }
-    
+
     // Шукаємо батьківські параграфи, йдучи назад від знайденої позиції
     for (let i = matchPosition - 1; i >= 0; i--) {
-        const paragraph = allParagraphs[i].trim();
+        const paragraph = getParagraphText(allParagraphs[i]).trim();
         
         // Перевіряємо чи це заголовок розділу (починається з цифр та крапки)
         if (isHierarchyHeader(paragraph)) {

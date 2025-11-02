@@ -20,12 +20,14 @@ pub struct SearchEngineMatch {
     pub position: usize,
 }
 
+use crate::document_record::Paragraph;
+
 #[derive(Debug, Clone)]
 pub struct SearchEngineResult {
     pub file_name: String,
     pub file_path: String,
     pub matches: Vec<SearchEngineMatch>,
-    pub all_paragraphs: Vec<String>,
+    pub all_paragraphs: Vec<Paragraph>,
     pub file_size: u64,
     pub last_modified: u64,
 }
@@ -196,16 +198,11 @@ impl SearchEngine {
                     }
 
                     if !document_matches.is_empty() {
-                        // Конвертуємо параграфи в текст для зворотної сумісності
-                        let all_paragraphs_text: Vec<String> = paragraphs.iter()
-                            .map(|p| p.text.clone())
-                            .collect();
-
                         results.push(SearchEngineResult {
                             file_name: document.file_name.clone(),
                             file_path: document.file_path.clone(),
                             matches: document_matches,
-                            all_paragraphs: all_paragraphs_text,
+                            all_paragraphs: paragraphs,
                             file_size: document.file_size,
                             last_modified: document.last_modified,
                         });
@@ -255,16 +252,11 @@ impl SearchEngine {
                 }
 
                 if has_any_match {
-                    // Конвертуємо параграфи в текст для зворотної сумісності
-                    let all_paragraphs_text: Vec<String> = paragraphs.iter()
-                        .map(|p| p.text.clone())
-                        .collect();
-
                     results.push(SearchEngineResult {
                         file_name: document.file_name.clone(),
                         file_path: document.file_path.clone(),
                         matches: document_matches,
-                        all_paragraphs: all_paragraphs_text,
+                        all_paragraphs: paragraphs,
                         file_size: document.file_size,
                         last_modified: document.last_modified,
                     });

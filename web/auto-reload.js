@@ -3,7 +3,7 @@
     let lastModified = {};
 
     function checkForUpdates() {
-        fetch('/static/app.js?timestamp=' + Date.now(), {method: 'HEAD'})
+        fetch('/app.js?timestamp=' + Date.now(), {method: 'HEAD'})
             .then(response => {
                 const lastMod = response.headers.get('last-modified');
                 if (lastModified.js && lastModified.js !== lastMod) {
@@ -14,7 +14,7 @@
             })
             .catch(() => {});
 
-        fetch('/static/style.css?timestamp=' + Date.now(), {method: 'HEAD'})
+        fetch('/style.css?timestamp=' + Date.now(), {method: 'HEAD'})
             .then(response => {
                 const lastMod = response.headers.get('last-modified');
                 if (lastModified.css && lastModified.css !== lastMod) {
@@ -26,9 +26,9 @@
             .catch(() => {});
     }
 
-    // Check for updates every 5 seconds in development
+    // Check for updates every 30 seconds in development
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        setInterval(checkForUpdates, 5000);
-        console.log('Auto-reload enabled for development');
+        setInterval(checkForUpdates, 30000);
+        console.log('Auto-reload enabled for development (checks every 30 seconds)');
     }
 })();
