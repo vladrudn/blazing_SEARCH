@@ -80,7 +80,8 @@ impl SearchEngine {
         };
 
         // Оновлюємо дані з блокуванням
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock()
+            .map_err(|e| format!("Помилка блокування даних: {}", e))?;
         data.index = index;
         data.inverted_index = inverted_index;
 
@@ -103,7 +104,8 @@ impl SearchEngine {
         };
 
         // Оновлюємо дані з блокуванням
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock()
+            .map_err(|e| format!("Помилка блокування даних: {}", e))?;
         data.index = index;
         data.inverted_index = inverted_index;
 
@@ -133,7 +135,8 @@ impl SearchEngine {
         let mut results = Vec::new();
 
         // Отримуємо доступ до даних
-        let data = self.data.lock().unwrap();
+        let data = self.data.lock()
+            .map_err(|e| format!("Помилка блокування даних: {}", e))?;
 
         // Використовуємо інвертований індекс якщо доступний
         if let Some(ref inverted_index) = data.inverted_index {
@@ -390,9 +393,12 @@ impl SearchEngine {
 
         // Видаляємо голосні в кінці
         while !result.is_empty() {
-            let last_char = result.chars().last().unwrap();
-            if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
-                result.pop();
+            if let Some(last_char) = result.chars().last() {
+                if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
+                    result.pop();
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
@@ -402,7 +408,8 @@ impl SearchEngine {
     }
 
     pub fn get_stats(&self) -> (usize, usize) {
-        let data = self.data.lock().unwrap();
+        let data = self.data.lock()
+            .expect("Критична помилка блокування даних при отриманні статистики");
         (data.index.total_documents, data.index.total_words)
     }
 
@@ -413,9 +420,12 @@ impl SearchEngine {
         // Перевіряємо чи існують файли індексів і чи вони новіші за поточні
         if std::path::Path::new(documents_path).exists() && std::path::Path::new(inverted_path).exists() {
             let should_reload = {
-                let data = self.data.lock().unwrap();
-                // Якщо інвертований індекс відсутній, перезавантажуємо
-                data.inverted_index.is_none() || data.index.documents.is_empty()
+                if let Ok(data) = self.data.lock() {
+                    // Якщо інвертований індекс відсутній, перезавантажуємо
+                    data.inverted_index.is_none() || data.index.documents.is_empty()
+                } else {
+                    return; // Не можемо отримати блокування, пропускаємо
+                }
             };
 
             if should_reload {

@@ -169,8 +169,8 @@ impl DocxParser {
                     match e.name().as_ref() {
                         b"w:abstractNum" => {
                             if let Some(id) = self.get_attribute_value(e, "w:abstractNumId") {
-                                current_abstract_num_id = Some(id);
-                                self.numbering_data.abstract_num_map.insert(current_abstract_num_id.clone().unwrap(), HashMap::new());
+                                current_abstract_num_id = Some(id.clone());
+                                self.numbering_data.abstract_num_map.insert(id, HashMap::new());
                             }
                         }
                         b"w:lvl" => {
@@ -417,17 +417,14 @@ impl DocxParser {
             return Some(ParagraphInfo::new(text, style));
         }
 
-        if has_quote_with_numbering && num_pr.is_some() {
-            let (ilvl, num_id) = num_pr.unwrap();
-            if let Some(level) = self.get_numbering_level(&ilvl, &num_id) {
-                self.update_numbering_for_level(level, current_numbering, *last_main_point);
-                let calculated_number = self.format_numbering(level, current_numbering);
-                return Some(ParagraphInfo::with_numbering(text, style, level, calculated_number));
-            }
-            return Some(ParagraphInfo::new(text, style));
-        }
-
         if has_quote_with_numbering {
+            if let Some((ilvl, num_id)) = num_pr {
+                if let Some(level) = self.get_numbering_level(&ilvl, &num_id) {
+                    self.update_numbering_for_level(level, current_numbering, *last_main_point);
+                    let calculated_number = self.format_numbering(level, current_numbering);
+                    return Some(ParagraphInfo::with_numbering(text, style, level, calculated_number));
+                }
+            }
             return Some(ParagraphInfo::new(text, style));
         }
 

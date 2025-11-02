@@ -1,0 +1,61 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+**/*.pdb
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Indexes - these are generated files and shouldn't be in version control
+*.json
+*.atomic_temp
+nakazi_cache/
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.rlib
+*.rmeta
+
+# Debug info
+*.pdb
+*.dSYM/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/WixTools/
+
+# Test artifacts
+target/criterion/
+target/debug/deps/test-*
+*.profraw
+
+# Documentation
+target/doc/
+book/
+
+# Backup files
+*.bak
+*.tmp
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Claude settings (user-specific)
+.claude/settings.local.json

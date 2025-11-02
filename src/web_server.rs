@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::process::Command;
 use crate::search_engine::{SearchEngine, SearchMode};
 use crate::auto_indexer::AutoIndexer;
+use std::net::UdpSocket;
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
@@ -51,6 +52,15 @@ pub struct ErrorResponse {
 
 pub struct AppState {
     pub search_engine: Arc<SearchEngine>,
+}
+
+// Функція для отримання локальної IP-адреси
+fn get_local_ip() -> Option<String> {
+    // Створюємо UDP-сокет для з'єднання (без реальної відправки даних)
+    // Це дозволяє ОС визначити правильний мережевий інтерфейс
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip().to_string())
 }
 
 pub async fn search_handler(
@@ -120,7 +130,10 @@ pub async fn index_handler() -> Result<HttpResponse> {
 }
 
 pub async fn static_handler(req: actix_web::HttpRequest) -> Result<HttpResponse> {
-    let path: std::path::PathBuf = req.match_info().query("filename").parse().unwrap();
+    let path: std::path::PathBuf = req.match_info()
+        .query("filename")
+        .parse()
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid file path"))?;
     let file_path = std::path::Path::new("./web").join(path);
 
     match std::fs::read(&file_path) {
@@ -202,7 +215,14 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
     auto_indexer.start_background_indexing().await;
 
     println!("Запуск веб-сервера на http://0.0.0.0:8080");
-    println!("Доступ з локальної мережі: http://192.168.2.209:8080");
+
+    // Виводимо актуальну локальну IP-адресу
+    if let Some(local_ip) = get_local_ip() {
+        println!("Доступ з локальної мережі: http://{}:8080", local_ip);
+    } else {
+        println!("⚠️  Не вдалося визначити локальну IP-адресу");
+        println!("💡 Використовуйте localhost або перевірте ipconfig");
+    }
 
     HttpServer::new(move || {
         App::new()

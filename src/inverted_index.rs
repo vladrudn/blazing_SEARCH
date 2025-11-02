@@ -388,9 +388,12 @@ impl InvertedIndex {
         // Видаляємо голосні в кінці
         static UKRAINIAN_VOWELS: &str = "аеєиіїоуюяь";
         while !result.is_empty() {
-            let last_char = result.chars().last().unwrap();
-            if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
-                result.pop();
+            if let Some(last_char) = result.chars().last() {
+                if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
+                    result.pop();
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
