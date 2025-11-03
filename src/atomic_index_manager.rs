@@ -83,9 +83,31 @@ impl AtomicIndexManager {
         }
 
         println!("🔄 Атомарне переміщення файлів...");
-        
+
         // Етап 4: Атомарно переміщуємо тимчасові файли на місце основних
+        // На Windows потрібно спочатку видалити існуючий файл перед rename
+
         // Спочатку переміщуємо індекс документів
+        if Path::new(&self.documents_index_path).exists() {
+            // Пробуємо видалити з кількома спробами (файл може бути тимчасово зайнятий)
+            let mut attempts = 0;
+            loop {
+                match fs::remove_file(&self.documents_index_path) {
+                    Ok(_) => break,
+                    Err(_e) if attempts < 3 => {
+                        attempts += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(e) => {
+                        self.restore_from_backups(&backup_doc_path, &backup_inv_path);
+                        let _ = fs::remove_file(&temp_doc_path);
+                        let _ = fs::remove_file(&temp_inv_path);
+                        return Err(format!("Помилка видалення старого індексу документів після {} спроб: {}", attempts + 1, e));
+                    }
+                }
+            }
+        }
+
         if let Err(e) = fs::rename(&temp_doc_path, &self.documents_index_path) {
             // При помилці відновлюємо з резервних копій
             self.restore_from_backups(&backup_doc_path, &backup_inv_path);
@@ -94,6 +116,25 @@ impl AtomicIndexManager {
         }
 
         // Потім переміщуємо інвертований індекс
+        if Path::new(&self.inverted_index_path).exists() {
+            // Пробуємо видалити з кількома спробами (файл може бути тимчасово зайнятий)
+            let mut attempts = 0;
+            loop {
+                match fs::remove_file(&self.inverted_index_path) {
+                    Ok(_) => break,
+                    Err(_e) if attempts < 3 => {
+                        attempts += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(e) => {
+                        self.restore_from_backups(&backup_doc_path, &backup_inv_path);
+                        let _ = fs::remove_file(&temp_inv_path);
+                        return Err(format!("Помилка видалення старого інвертованого індексу після {} спроб: {}", attempts + 1, e));
+                    }
+                }
+            }
+        }
+
         if let Err(e) = fs::rename(&temp_inv_path, &self.inverted_index_path) {
             // При помилці відновлюємо з резервних копій
             self.restore_from_backups(&backup_doc_path, &backup_inv_path);

@@ -176,6 +176,7 @@ impl AutoIndexer {
 
     /// Збирає метадані файлів (шлях, розмір, дата модифікації) БЕЗ читання вмісту
     /// ВАЖЛИВО: Зберігає ВІДНОСНІ шляхи для коректного порівняння
+    /// Фільтрує тільки файли з папок-років
     fn collect_metadata(path: &str) -> Result<Vec<(String, u64, std::time::SystemTime)>, String> {
         use walkdir::WalkDir;
         use std::path::Path;
@@ -197,11 +198,16 @@ impl AutoIndexer {
                 if let Ok(meta) = entry.metadata() {
                     if let Ok(modified) = meta.modified() {
                         // Отримуємо ВІДНОСНИЙ шлях від базової папки
-                        let relative_path = entry.path()
+                        let relative_path_buf = entry.path()
                             .strip_prefix(base_path)
-                            .unwrap_or(entry.path())
-                            .to_string_lossy()
-                            .to_string();
+                            .unwrap_or(entry.path());
+
+                        // Фільтруємо тільки файли з папок-років
+                        if !Self::should_sync_file(relative_path_buf) {
+                            continue;
+                        }
+
+                        let relative_path = relative_path_buf.to_string_lossy().to_string();
 
                         metadata.push((relative_path, meta.len(), modified));
                     }
@@ -249,6 +255,36 @@ impl AutoIndexer {
         Ok(remote_metadata != local_metadata)
     }
 
+    /// Перевіряє, чи файл належить до папки з роком (2022, 2023, 2024, 2025 тощо)
+    /// Виключає: ZIP-архіви, Excel-файли, папку "ЕРДР", .git репозиторій
+    fn should_sync_file(relative_path: &std::path::Path) -> bool {
+        let path_str = relative_path.to_string_lossy();
+
+        // Виключаємо файли в кореневій папці (не в підпапках)
+        if relative_path.components().count() == 1 {
+            return false;
+        }
+
+        // Отримуємо першу частину шляху (папку верхнього рівня)
+        let first_component = relative_path.components()
+            .next()
+            .and_then(|c| c.as_os_str().to_str())
+            .unwrap_or("");
+
+        // Перевіряємо, чи це папка з роком (починається з 4 цифр)
+        let is_year_folder = first_component.len() >= 4
+            && first_component.chars().take(4).all(|c| c.is_ascii_digit());
+
+        // Виключаємо небажані файли та папки
+        let is_excluded = path_str.ends_with(".zip")
+            || path_str.ends_with(".xlsx")
+            || path_str.ends_with(".xls")
+            || path_str.contains("ЕРДР")
+            || path_str.contains(".git");
+
+        is_year_folder && !is_excluded
+    }
+
     /// Синхронізує файли з сервера на локальний диск (копіює нові/оновлені, видаляє застарілі)
     async fn sync_to_local_cache(
         remote_path: &str,
@@ -276,6 +312,11 @@ impl AutoIndexer {
                 let remote_file = entry.path();
                 let relative_path = remote_file.strip_prefix(remote_path)
                     .map_err(|e| format!("Помилка шляху: {}", e))?;
+
+                // Фільтруємо файли - тільки папки з роками
+                if !Self::should_sync_file(relative_path) {
+                    continue;
+                }
 
                 // Додаємо до списку файлів на сервері
                 remote_files.insert(relative_path.to_path_buf());
