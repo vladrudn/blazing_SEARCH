@@ -242,6 +242,7 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
             .route("/api/search", web::post().to(search_handler))
             .route("/api/open-file", web::post().to(open_file_handler))
             .route("/static/{filename:.*}", web::get().to(static_handler))
+            .route("/static/{filename:.*}", web::head().to(static_handler))
     })
         .bind("0.0.0.0:8080")?
         .run()

@@ -3,7 +3,7 @@
     let lastModified = {};
 
     function checkForUpdates() {
-        fetch('/app.js?timestamp=' + Date.now(), {method: 'HEAD'})
+        fetch('/static/app.js?timestamp=' + Date.now(), {method: 'HEAD'})
             .then(response => {
                 const lastMod = response.headers.get('last-modified');
                 if (lastModified.js && lastModified.js !== lastMod) {
@@ -14,7 +14,7 @@
             })
             .catch(() => {});
 
-        fetch('/style.css?timestamp=' + Date.now(), {method: 'HEAD'})
+        fetch('/static/style.css?timestamp=' + Date.now(), {method: 'HEAD'})
             .then(response => {
                 const lastMod = response.headers.get('last-modified');
                 if (lastModified.css && lastModified.css !== lastMod) {
