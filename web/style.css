@@ -339,9 +339,10 @@ body {
 }
 
 .paragraph {
-    margin-bottom: 12px;
-    padding: 8px 0;
+    margin-bottom: 0;
+    padding: 0;
     border-radius: 4px;
+    text-indent: 1.5em; /* Відступ абзацу */
 }
 
 .paragraph.found-text {

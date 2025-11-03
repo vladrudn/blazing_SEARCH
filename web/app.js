@@ -1148,7 +1148,7 @@ function selectFile(fileIndex, query) {
 
             const paragraph = document.createElement('div');
             paragraph.className = 'paragraph';
-            paragraph.style.marginBottom = '0.5em';
+            paragraph.style.marginBottom = '0'; // Базовий відступ - 0
             paragraph.style.whiteSpace = 'pre-wrap'; // Зберігаємо переноси рядків
             paragraph.style.lineHeight = '1.4';
 
