@@ -3,9 +3,15 @@ use crate::inverted_index::InvertedIndex;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
+use std::path::Path;
 use std::sync::Mutex;
 
 static WORD_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[\p{L}\p{N}]+\b").unwrap());
+
+// Регулярний вираз для пошуку дати у форматі DD.MM.YYYY
+static DATE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(\d{2})\.(\d{2})\.(\d{4})").unwrap()
+});
 
 static UKRAINIAN_VOWELS: &str = "аеєиіїоуюяь";
 
@@ -66,12 +72,63 @@ impl SearchEngine {
         }
     }
 
+    /// Витягує дату з назви файлу у форматі DD.MM.YYYY
+    fn extract_date_from_filename(file_path: &str) -> Option<(u32, u32, u32)> {
+        let filename = Path::new(file_path)
+            .file_name()?
+            .to_str()?;
+
+        if let Some(captures) = DATE_REGEX.captures(filename) {
+            let day: u32 = captures.get(1)?.as_str().parse().ok()?;
+            let month: u32 = captures.get(2)?.as_str().parse().ok()?;
+            let year: u32 = captures.get(3)?.as_str().parse().ok()?;
+
+            // Перевірка валідності дати
+            if day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 {
+                Some((year, month, day))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Порівняння дат для сортування (від нової до старої)
+    fn compare_dates(date1: Option<(u32, u32, u32)>, date2: Option<(u32, u32, u32)>) -> std::cmp::Ordering {
+        match (date1, date2) {
+            (Some((y1, m1, d1)), Some((y2, m2, d2))) => {
+                // Для сортування від нових до старих: більша дата має йти першою
+                // Спочатку порівнюємо роки (більший рік має йти першим)
+                match y2.cmp(&y1) {
+                    std::cmp::Ordering::Equal => {
+                        // Якщо роки рівні, порівнюємо місяці (більший місяць має йти першим)
+                        match m2.cmp(&m1) {
+                            std::cmp::Ordering::Equal => {
+                                // Якщо місяці рівні, порівнюємо дні (більший день має йти першим)
+                                d2.cmp(&d1)
+                            },
+                            other => other,
+                        }
+                    },
+                    other => other,
+                }
+            },
+            (Some(_), None) => std::cmp::Ordering::Less, // Файли з датою йдуть перед файлами без дати
+            (None, Some(_)) => std::cmp::Ordering::Greater, // Файли без дати йдуть після файлів з датою
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    }
+
     pub fn load_from_file(&mut self, index_path: &str) -> Result<(), String> {
         let content = fs::read_to_string(index_path)
             .map_err(|e| format!("Помилка читання індексу: {}", e))?;
 
         let index: DocumentIndex =
             serde_json::from_str(&content).map_err(|e| format!("Помилка парсингу JSON: {}", e))?;
+
+        // ❌ НЕ сортуємо документи тут, бо це зламає інвертований індекс!
+        // Замість цього сортуємо РЕЗУЛЬТАТИ ПОШУКУ в методі search()
 
         // Спробуємо завантажити інвертований індекс
         let inverted_path = "inverted_index.json";
@@ -96,6 +153,9 @@ impl SearchEngine {
 
         let index: DocumentIndex =
             serde_json::from_str(&content).map_err(|e| format!("Помилка парсингу JSON: {}", e))?;
+
+        // ❌ НЕ сортуємо документи тут, бо це зламає інвертований індекс!
+        // Замість цього сортуємо РЕЗУЛЬТАТИ ПОШУКУ в методі search()
 
         // Спробуємо завантажити інвертований індекс
         let inverted_path = "inverted_index.json";
@@ -264,35 +324,19 @@ impl SearchEngine {
             }
         }
 
-        // Сортуємо за порядком в індексі (файли вже впорядковані від нових до старих за датою з назви файлу)
-        // Зберігаємо цей порядок, потім за кількістю збігів
+        // Сортуємо за датою з назви файлу (від нових до старих), потім за кількістю збігів
         results.sort_by(|a, b| {
-            // Знаходимо індекси файлів в оригінальному індексі
-            let index_a = data
-                .index
-                .documents
-                .iter()
-                .position(|doc| doc.file_path == a.file_path);
-            let index_b = data
-                .index
-                .documents
-                .iter()
-                .position(|doc| doc.file_path == b.file_path);
+            // Витягуємо дати з назв файлів
+            let date_a = Self::extract_date_from_filename(&a.file_path);
+            let date_b = Self::extract_date_from_filename(&b.file_path);
 
-            match (index_a, index_b) {
-                (Some(idx_a), Some(idx_b)) => {
-                    // Зберігаємо порядок (менший індекс спочатку = новіші файли)
-                    match idx_a.cmp(&idx_b) {
-                        std::cmp::Ordering::Equal => {
-                            // Якщо порядок однаковий, сортуємо за кількістю збігів
-                            b.matches.len().cmp(&a.matches.len())
-                        }
-                        other => other,
-                    }
+            // Порівнюємо за датою
+            match Self::compare_dates(date_a, date_b) {
+                std::cmp::Ordering::Equal => {
+                    // Якщо дати однакові, сортуємо за кількістю збігів
+                    b.matches.len().cmp(&a.matches.len())
                 }
-                (Some(_), None) => std::cmp::Ordering::Less, // a знайдено, b ні
-                (None, Some(_)) => std::cmp::Ordering::Greater, // b знайдено, a ні
-                (None, None) => b.matches.len().cmp(&a.matches.len()), // обидва не знайдені, сортуємо за збігами
+                other => other,
             }
         });
 

@@ -266,12 +266,14 @@ impl FolderProcessor {
                     .map(|(i, doc)| (doc.file_path.clone(), i))
                     .collect();
 
+            // ❌ ВИМКНЕНО: Сортування змінює індекси документів,
+            // що вимагає повного перебудування інвертованого індексу (занадто повільно)
             // Сортуємо документи за датою з назви файлу (від нових до старих)
-            index.documents.sort_by(|a, b| {
-                let date_a = self.extract_date_from_filename(&a.file_path);
-                let date_b = self.extract_date_from_filename(&b.file_path);
-                self.compare_dates(date_a, date_b)
-            });
+            // index.documents.sort_by(|a, b| {
+            //     let date_a = self.extract_date_from_filename(&a.file_path);
+            //     let date_b = self.extract_date_from_filename(&b.file_path);
+            //     self.compare_dates(date_a, date_b)
+            // });
 
             // Створюємо мапу нових індексів
             let file_path_to_new_index: std::collections::HashMap<String, usize> =
@@ -287,12 +289,14 @@ impl FolderProcessor {
                 })
                 .collect()
         } else {
+            // ❌ ВИМКНЕНО: Сортування змінює індекси документів,
+            // що вимагає повного перебудування інвертованого індексу (занадто повільно)
             // Сортуємо документи за датою з назви файлу (від нових до старих)
-            index.documents.sort_by(|a, b| {
-                let date_a = self.extract_date_from_filename(&a.file_path);
-                let date_b = self.extract_date_from_filename(&b.file_path);
-                self.compare_dates(date_a, date_b)
-            });
+            // index.documents.sort_by(|a, b| {
+            //     let date_a = self.extract_date_from_filename(&a.file_path);
+            //     let date_b = self.extract_date_from_filename(&b.file_path);
+            //     self.compare_dates(date_a, date_b)
+            // });
             std::collections::HashMap::new()
         };
 

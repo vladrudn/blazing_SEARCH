@@ -239,12 +239,14 @@ impl InvertedIndex {
         let total_docs = document_index.documents.len();
         let (start_index, end_index) = match mode {
             SearchMode::Quick => {
-                let end = if total_docs > 170 { 170 } else { total_docs };
-                (0, end)
+                // Беремо ОСТАННІ 170 файлів (найновіші), бо нові додаються в кінець
+                let start = if total_docs > 170 { total_docs - 170 } else { 0 };
+                (start, total_docs)
             },
             SearchMode::Remaining => {
-                let start = if total_docs > 170 { 170 } else { 0 };
-                (start, total_docs)
+                // Беремо всі файли ДО останніх 170 (найстаріші)
+                let end = if total_docs > 170 { total_docs - 170 } else { 0 };
+                (0, end)
             },
             SearchMode::Full => (0, total_docs),
         };

@@ -19,7 +19,7 @@ class FilePathCopier {
     constructor() {
         this.initializeToastContainer();
     }
-    
+
     initializeToastContainer() {
         if (!document.getElementById('toast-container')) {
             const container = document.createElement('div');
@@ -35,13 +35,29 @@ class FilePathCopier {
             document.body.appendChild(container);
         }
     }
-    
+
+    // Конвертує локальний шлях кешу в мережевий шлях
+    convertToNetworkPath(localPath) {
+        // Нормалізуємо шлях - замінюємо всі слеші на прямі
+        const normalizedPath = localPath.replace(/\\/g, '/');
+
+        // Перевіряємо чи це шлях до кешу
+        if (normalizedPath.startsWith('./nakazi_cache/')) {
+            const relativePath = normalizedPath.substring('./nakazi_cache/'.length);
+            return '\\\\salem\\Documents\\Накази\\' + relativePath.replace(/\//g, '\\');
+        }
+
+        // Якщо це вже мережевий шлях або інший формат, повертаємо як є
+        return localPath;
+    }
+
     async copyFilePath(filePath) {
         try {
+            const networkPath = this.convertToNetworkPath(filePath);
             if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(filePath);
+                await navigator.clipboard.writeText(networkPath);
             } else {
-                this.fallbackCopy(filePath);
+                this.fallbackCopy(networkPath);
             }
             this.showToast('Шлях файлу скопійовано!', 'success');
             return true;
@@ -51,13 +67,14 @@ class FilePathCopier {
             return false;
         }
     }
-    
+
     async copyFilePathWithInstruction(filePath) {
         try {
+            const networkPath = this.convertToNetworkPath(filePath);
             if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(filePath);
+                await navigator.clipboard.writeText(networkPath);
             } else {
-                this.fallbackCopy(filePath);
+                this.fallbackCopy(networkPath);
             }
             this.showExtendedToast();
             return true;
