@@ -328,6 +328,29 @@ function handleInputProcess(element) {
     element.value = processSearchInput(element.value);
 }
 
+// Обробник копіювання - копіює тільки чистий текст без форматування
+document.addEventListener('copy', (event) => {
+    const selection = window.getSelection();
+    if (!selection || selection.toString().length === 0) {
+        return;
+    }
+
+    // Перевіряємо чи копіюємо з document-preview
+    const documentPreview = document.getElementById('document-preview');
+    if (documentPreview && documentPreview.contains(selection.anchorNode)) {
+        event.preventDefault();
+
+        // Отримуємо виділений текст
+        let plainText = selection.toString();
+
+        // Поміщаємо в буфер тільки чистий текст
+        event.clipboardData.setData('text/plain', plainText);
+
+        // НЕ додаємо HTML форматування
+        // event.clipboardData.setData('text/html', ...) - не викликаємо!
+    }
+});
+
 // Ініціалізація при завантаженні сторінки
 window.addEventListener('load', () => {
     // Обробник для Enter в полі пошуку

@@ -5,6 +5,18 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+/* Прибираємо форматування при копіюванні */
+.document-content * {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+@media print {
+    * {
+        font-family: inherit !important;
+    }
+}
+
 body {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     min-height: 100vh;
