@@ -1,18 +1,18 @@
-mod docx_parser;
+mod atomic_index_manager;
+mod auto_indexer;
 mod document_record;
+mod docx_parser;
 mod folder_processor;
+mod inverted_index;
 mod search_engine;
 mod web_server;
-mod inverted_index;
-mod auto_indexer;
-mod atomic_index_manager;
 
-use std::path::Path;
-use std::env;
-use search_engine::SearchEngine;
-use inverted_index::InvertedIndex;
-use document_record::DocumentIndex;
 use atomic_index_manager::AtomicIndexManager;
+use document_record::DocumentIndex;
+use inverted_index::InvertedIndex;
+use search_engine::SearchEngine;
+use std::env;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() {
@@ -51,7 +51,10 @@ async fn start_web_mode() {
 
     if Path::new(index_path).exists() {
         if let Ok(metadata) = std::fs::metadata(index_path) {
-            println!("📁 Розмір файлу індексу: {:.2} MB", metadata.len() as f64 / 1_048_576.0);
+            println!(
+                "📁 Розмір файлу індексу: {:.2} MB",
+                metadata.len() as f64 / 1_048_576.0
+            );
         }
 
         println!("⏳ Завантаження індексу...");
@@ -87,14 +90,18 @@ async fn start_cli_mode() {
 }
 
 async fn perform_initial_indexing() {
-    let remote_folder = "\\\\salem\\Documents\\Накази";
+    // let remote_folder = "\\\\salem\\Documents\\Накази";
+    let remote_folder = "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\";
     let local_cache = "./nakazi_cache";
     let documents_index_path = "documents_index.json";
     let inverted_index_path = "inverted_index.json";
 
     println!("🔍 Автоматична індексація папки: {}", remote_folder);
     println!("📥 Копіювання файлів до локального кешу: {}", local_cache);
-    println!("📄 Результат буде збережено в: {} та {}", documents_index_path, inverted_index_path);
+    println!(
+        "📄 Результат буде збережено в: {} та {}",
+        documents_index_path, inverted_index_path
+    );
 
     // Копіюємо файли з сервера до локального кешу
     match sync_files_to_cache(remote_folder, local_cache) {
@@ -125,16 +132,21 @@ async fn perform_initial_indexing() {
                 Ok(_) => println!("✅ Перевірка цілісності пройшла успішно"),
                 Err(e) => {
                     println!("⚠️ Попередження при перевірці цілісності: {}", e);
-                    
+
                     // Спробуємо перебудувати інвертований індекс якщо потрібно
                     match index_manager.rebuild_inverted_index_if_needed() {
                         Ok(rebuilt) => {
                             if rebuilt {
-                                println!("✅ Критичні проблеми виправлено шляхом перебудови індексу");
+                                println!(
+                                    "✅ Критичні проблеми виправлено шляхом перебудови індексу"
+                                );
                             }
                         }
                         Err(rebuild_error) => {
-                            println!("❌ Помилка при спробі перебудови індексу: {}", rebuild_error);
+                            println!(
+                                "❌ Помилка при спробі перебудови індексу: {}",
+                                rebuild_error
+                            );
                         }
                     }
                 }
@@ -143,18 +155,27 @@ async fn perform_initial_indexing() {
             // Показуємо розміри файлів
             let doc_path = Path::new(documents_index_path);
             if let Ok(metadata) = std::fs::metadata(doc_path) {
-                println!("📦 Розмір індексу документів: {:.2} MB", metadata.len() as f64 / 1_048_576.0);
+                println!(
+                    "📦 Розмір індексу документів: {:.2} MB",
+                    metadata.len() as f64 / 1_048_576.0
+                );
             }
 
             let inv_path = Path::new(inverted_index_path);
             if let Ok(metadata) = std::fs::metadata(inv_path) {
-                println!("📦 Розмір інвертованого індексу: {:.2} MB", metadata.len() as f64 / 1_048_576.0);
+                println!(
+                    "📦 Розмір інвертованого індексу: {:.2} MB",
+                    metadata.len() as f64 / 1_048_576.0
+                );
             }
 
             // Показуємо загальну статистику
             if let Ok(doc_index) = DocumentIndex::load_from_file(documents_index_path) {
                 println!("📊 Загальна статистика:");
-                println!("   - Загальна кількість документів: {}", doc_index.total_documents);
+                println!(
+                    "   - Загальна кількість документів: {}",
+                    doc_index.total_documents
+                );
                 println!("   - Загальна кількість слів: {}", doc_index.total_words);
 
                 if let Ok(inv_index) = InvertedIndex::load_from_file(inverted_index_path) {
@@ -184,14 +205,15 @@ fn should_sync_file(relative_path: &Path) -> bool {
     }
 
     // Отримуємо першу частину шляху (папку верхнього рівня)
-    let first_component = relative_path.components()
+    let first_component = relative_path
+        .components()
         .next()
         .and_then(|c| c.as_os_str().to_str())
         .unwrap_or("");
 
     // Перевіряємо, чи це папка з роком (починається з 4 цифр)
-    let is_year_folder = first_component.len() >= 4
-        && first_component.chars().take(4).all(|c| c.is_ascii_digit());
+    let is_year_folder =
+        first_component.len() >= 4 && first_component.chars().take(4).all(|c| c.is_ascii_digit());
 
     // Виключаємо небажані файли та папки
     let is_excluded = path_str.ends_with(".zip")
@@ -204,13 +226,12 @@ fn should_sync_file(relative_path: &Path) -> bool {
 }
 
 fn sync_files_to_cache(remote_path: &str, local_cache_path: &str) -> Result<usize, String> {
-    use std::fs;
     use std::collections::HashSet;
+    use std::fs;
     use walkdir::WalkDir;
 
     // Створюємо локальну папку якщо не існує
-    fs::create_dir_all(local_cache_path)
-        .map_err(|e| format!("Помилка створення кешу: {}", e))?;
+    fs::create_dir_all(local_cache_path).map_err(|e| format!("Помилка створення кешу: {}", e))?;
 
     let mut file_count = 0;
     let mut remote_files = HashSet::new();
@@ -223,7 +244,8 @@ fn sync_files_to_cache(remote_path: &str, local_cache_path: &str) -> Result<usiz
     {
         if entry.file_type().is_file() {
             let remote_file = entry.path();
-            let relative_path = remote_file.strip_prefix(remote_path)
+            let relative_path = remote_file
+                .strip_prefix(remote_path)
                 .map_err(|e| format!("Помилка шляху: {}", e))?;
 
             // Фільтруємо файли - тільки папки з роками
@@ -237,8 +259,12 @@ fn sync_files_to_cache(remote_path: &str, local_cache_path: &str) -> Result<usiz
 
             // Перевіряємо, чи потрібно копіювати файл
             let should_copy = if local_file.exists() {
-                if let (Ok(remote_meta), Ok(local_meta)) = (remote_file.metadata(), local_file.metadata()) {
-                    if let (Ok(remote_modified), Ok(local_modified)) = (remote_meta.modified(), local_meta.modified()) {
+                if let (Ok(remote_meta), Ok(local_meta)) =
+                    (remote_file.metadata(), local_file.metadata())
+                {
+                    if let (Ok(remote_modified), Ok(local_modified)) =
+                        (remote_meta.modified(), local_meta.modified())
+                    {
                         remote_modified > local_modified || remote_meta.len() != local_meta.len()
                     } else {
                         true
@@ -274,7 +300,8 @@ fn sync_files_to_cache(remote_path: &str, local_cache_path: &str) -> Result<usiz
     {
         if entry.file_type().is_file() {
             let local_file = entry.path();
-            let relative_path = local_file.strip_prefix(local_cache_path)
+            let relative_path = local_file
+                .strip_prefix(local_cache_path)
                 .map_err(|e| format!("Помилка шляху: {}", e))?;
 
             if !remote_files.contains(relative_path) {

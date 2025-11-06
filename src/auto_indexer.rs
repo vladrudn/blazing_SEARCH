@@ -1,13 +1,13 @@
+use crate::atomic_index_manager::{AtomicIndexManager, UpdateStats};
+use crate::search_engine::SearchEngine;
+use chrono::{DateTime, Local};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use chrono::{DateTime, Local};
-use crate::search_engine::SearchEngine;
-use crate::atomic_index_manager::{AtomicIndexManager, UpdateStats};
 
 pub struct AutoIndexer {
-    folder_path: String,           // Мережева папка \\salem\Documents\Наказі
-    local_cache_path: String,      // Локальна копія файлів
+    folder_path: String,      // Мережева папка \\salem\Documents\Наказі
+    local_cache_path: String, // Локальна копія файлів
     index_file_path: String,
     inverted_index_path: String,
     search_engine: Arc<SearchEngine>,
@@ -16,7 +16,8 @@ pub struct AutoIndexer {
 impl AutoIndexer {
     pub fn new(search_engine: Arc<SearchEngine>) -> Self {
         Self {
-            folder_path: "\\\\salem\\Documents\\Накази".to_string(),
+            // folder_path: "\\\\salem\\Documents\\Накази".to_string(),
+            folder_path: "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\".to_string(),
             local_cache_path: "./nakazi_cache".to_string(),
             index_file_path: "documents_index.json".to_string(),
             inverted_index_path: "inverted_index.json".to_string(),
@@ -43,61 +44,92 @@ impl AutoIndexer {
 
                 if first_run {
                     println!("");
-                    println!("🚀 [{time_str}] Запуск автоматичної перевірки файлів кожні 300 секунд...");
+                    println!(
+                        "🚀 [{time_str}] Запуск автоматичної перевірки файлів кожні 300 секунд..."
+                    );
                     first_run = false;
                 } else {
                     println!("");
                     println!("🔄 [{time_str}] Автоматична перевірка файлів...");
                 }
 
-                // КРОК 1: Швидка перевірка - чи є зміни?
-                match Self::check_for_changes(&folder_path, &local_cache_path).await {
+                // КРОК 1: Перевіряємо чи є зміни на сервері (для синхронізації)
+                let should_sync = match Self::check_for_changes(&folder_path, &local_cache_path).await {
                     Ok(has_changes) => {
-                        if !has_changes {
+                        if has_changes {
+                            println!("📥 [{time_str}] Виявлено зміни на сервері - копіюємо файли...");
+                        } else {
                             let end_time_str = Local::now().format("%H:%M:%S").to_string();
-                            println!("ℹ️ [{end_time_str}] Змін не виявлено - пропускаємо копіювання");
-                            continue; // ❌ НЕ КОПІЮЄМО, НЕ ІНДЕКСУЄМО
+                            println!(
+                                "ℹ️ [{end_time_str}] Змін на сервері не виявлено - пропускаємо копіювання"
+                            );
                         }
-
-                        println!("📥 [{time_str}] Виявлено зміни - копіюємо файли...");
-
-                        // КРОК 2: Копіюємо ТІЛЬКИ якщо є зміни
-                        if let Err(e) = Self::sync_to_local_cache(&folder_path, &local_cache_path).await {
-                            let end_time_str = Local::now().format("%H:%M:%S").to_string();
-                            println!("❌ [{end_time_str}] Помилка копіювання: {e}");
-                            continue;
-                        }
-
-                        // КРОК 3: Індексуємо ЛОКАЛЬНУ копію
-                        match Self::perform_incremental_update(
-                            &local_cache_path,  // 👈 Індексуємо локальні файли
-                            &index_file_path,
-                            &inverted_index_path,
-                            &search_engine,
-                        ).await {
-                            Ok(stats) => {
-                                let end_time: DateTime<Local> = Local::now();
-                                let end_time_str = end_time.format("%H:%M:%S").to_string();
-
-                                if stats.has_changes() {
-                                    println!("✅ [{end_time_str}] Автоматичне оновлення завершено: {stats}");
-                                } else {
-                                    println!("ℹ️ [{end_time_str}] Індексація завершена без змін");
-                                }
-                            }
-                            Err(e) => {
-                                let end_time_str = Local::now().format("%H:%M:%S").to_string();
-                                println!("❌ [{end_time_str}] Помилка індексації: {e}");
-                            }
-                        }
+                        has_changes
                     }
                     Err(e) => {
-                        // 🔒 ОФЛАЙН-РЕЖИМ: Мережа недоступна - НЕ ВИДАЛЯЄМО БАЗУ!
+                        // 🔒 ОФЛАЙН-РЕЖИМ: Мережа недоступна
                         let end_time_str = Local::now().format("%H:%M:%S").to_string();
                         println!("⚠️ [{end_time_str}] {}", e);
-                        println!("💡 [{end_time_str}] Застосунок продовжує працювати з існуючою базою даних");
-                        // ⚠️ ВАЖЛИВО: НЕ виконуємо жодних операцій з базою даних!
-                        // continue - просто чекаємо до наступної перевірки
+                        println!(
+                            "💡 [{end_time_str}] Працюємо в офлайн-режимі з локальним кешем"
+                        );
+                        false // Не синхронізуємо, але продовжуємо перевіряти індекс
+                    }
+                };
+
+                // КРОК 2: Копіюємо файли з сервера ТІЛЬКИ якщо є зміни
+                if should_sync {
+                    if let Err(e) = Self::sync_to_local_cache(&folder_path, &local_cache_path).await {
+                        let end_time_str = Local::now().format("%H:%M:%S").to_string();
+                        println!("❌ [{end_time_str}] Помилка копіювання: {e}");
+                        // Не продовжуємо цикл - перевіримо індекс нижче
+                    }
+                }
+
+                // КРОК 3: ЗАВЖДИ перевіряємо чи кеш синхронізований з індексом
+                // Це захищає від ситуації коли копіювання відбулося, але індексування перервалося
+                let cache_needs_indexing = match Self::check_cache_vs_index(&local_cache_path, &index_file_path).await {
+                    Ok(needs_indexing) => {
+                        if needs_indexing {
+                            println!("🔍 [{time_str}] Виявлено неіндексовані файли в кеші - запускаємо індексацію...");
+                        } else {
+                            let end_time_str = Local::now().format("%H:%M:%S").to_string();
+                            println!("✅ [{end_time_str}] Кеш синхронізований з індексом - індексування не потрібне");
+                        }
+                        needs_indexing
+                    }
+                    Err(e) => {
+                        println!("⚠️ Помилка перевірки кешу vs індекс: {}", e);
+                        true // Перестраховуємось - індексуємо
+                    }
+                };
+
+                // КРОК 4: Індексуємо ТІЛЬКИ якщо потрібно
+                if cache_needs_indexing {
+                    match Self::perform_incremental_update(
+                        &local_cache_path, // 👈 Індексуємо локальні файли з кешу
+                        &index_file_path,
+                        &inverted_index_path,
+                        &search_engine,
+                    )
+                    .await
+                    {
+                        Ok(stats) => {
+                            let end_time: DateTime<Local> = Local::now();
+                            let end_time_str = end_time.format("%H:%M:%S").to_string();
+
+                            if stats.has_changes() {
+                                println!(
+                                    "✅ [{end_time_str}] Автоматичне оновлення завершено: {stats}"
+                                );
+                            } else {
+                                println!("ℹ️ [{end_time_str}] Індексація завершена без змін");
+                            }
+                        }
+                        Err(e) => {
+                            let end_time_str = Local::now().format("%H:%M:%S").to_string();
+                            println!("❌ [{end_time_str}] Помилка індексації: {e}");
+                        }
                     }
                 }
             }
@@ -127,7 +159,8 @@ impl AutoIndexer {
                     }
 
                     // Оновлюємо SearchEngine
-                    if let Err(e) = Self::reload_search_engine(search_engine, index_file_path).await {
+                    if let Err(e) = Self::reload_search_engine(search_engine, index_file_path).await
+                    {
                         println!("⚠️  Помилка оновлення пошукового движка: {}", e);
                     }
                 }
@@ -143,7 +176,10 @@ impl AutoIndexer {
         }
     }
 
-    async fn reload_search_engine(search_engine: &Arc<SearchEngine>, index_file_path: &str) -> Result<(), String> {
+    async fn reload_search_engine(
+        search_engine: &Arc<SearchEngine>,
+        index_file_path: &str,
+    ) -> Result<(), String> {
         // Використовуємо новий метод reload для оновлення існуючого SearchEngine
         search_engine.reload(index_file_path)?;
         println!("✅ Пошуковий індекс успішно оновлено в пам'яті");
@@ -178,8 +214,8 @@ impl AutoIndexer {
     /// ВАЖЛИВО: Зберігає ВІДНОСНІ шляхи для коректного порівняння
     /// Фільтрує тільки файли з папок-років
     fn collect_metadata(path: &str) -> Result<Vec<(String, u64, std::time::SystemTime)>, String> {
-        use walkdir::WalkDir;
         use std::path::Path;
+        use walkdir::WalkDir;
 
         let mut metadata = Vec::new();
         let base_path = Path::new(path);
@@ -198,9 +234,8 @@ impl AutoIndexer {
                 if let Ok(meta) = entry.metadata() {
                     if let Ok(modified) = meta.modified() {
                         // Отримуємо ВІДНОСНИЙ шлях від базової папки
-                        let relative_path_buf = entry.path()
-                            .strip_prefix(base_path)
-                            .unwrap_or(entry.path());
+                        let relative_path_buf =
+                            entry.path().strip_prefix(base_path).unwrap_or(entry.path());
 
                         // Фільтруємо тільки файли з папок-років
                         if !Self::should_sync_file(relative_path_buf) {
@@ -219,12 +254,103 @@ impl AutoIndexer {
         Ok(metadata)
     }
 
+    /// Перевіряє чи є неіндексовані файли в локальному кеші
+    /// Порівнює файли в nakazi_cache з тими що є в documents_index.json
+    /// Повертає: Ok(true) - потрібно індексувати, Ok(false) - все синхронізовано
+    async fn check_cache_vs_index(
+        cache_path: &str,
+        index_file_path: &str,
+    ) -> Result<bool, String> {
+        use std::path::Path;
+        use crate::document_record::DocumentIndex;
+
+        // Якщо кешу немає - нічого індексувати
+        if !Path::new(cache_path).exists() {
+            return Ok(false);
+        }
+
+        // Збираємо метадані з локального кешу
+        let cache_metadata = match Self::collect_metadata(cache_path) {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                // Помилка читання кешу - краще перестрахуватися та запустити індексацію
+                println!("⚠️  Помилка читання кешу: {}", e);
+                return Ok(true);
+            }
+        };
+
+        // Якщо кеш порожній - нічого індексувати
+        if cache_metadata.is_empty() {
+            return Ok(false);
+        }
+
+        // Завантажуємо існуючий індекс
+        let existing_index = match DocumentIndex::load_from_file(index_file_path) {
+            Ok(index) => index,
+            Err(_) => {
+                // Індексу немає - потрібно створити
+                println!("ℹ️  Індекс не знайдено - потрібне повне індексування");
+                return Ok(true);
+            }
+        };
+
+        // Створюємо мапу індексованих файлів: шлях → (розмір, час модифікації)
+        let mut indexed_files = std::collections::HashMap::new();
+        for doc in &existing_index.documents {
+            // Отримуємо відносний шлях (прибираємо префікс nakazi_cache/)
+            let relative_path = if let Some(rel) = doc.file_path.strip_prefix(cache_path) {
+                rel.trim_start_matches('\\').trim_start_matches('/').to_string()
+            } else {
+                doc.file_path.clone()
+            };
+
+            indexed_files.insert(
+                relative_path,
+                (doc.file_size, doc.last_modified),
+            );
+        }
+
+        // Перевіряємо чи всі файли з кешу є в індексі
+        for (cache_file_path, cache_size, cache_modified) in &cache_metadata {
+            let cache_modified_secs = cache_modified
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            match indexed_files.get(cache_file_path) {
+                Some((indexed_size, indexed_modified)) => {
+                    // Файл є в індексі - перевіряємо чи він не змінився
+                    if cache_size != indexed_size || cache_modified_secs > *indexed_modified {
+                        println!("🔄 Файл змінився: {}", cache_file_path);
+                        return Ok(true); // Файл оновлено
+                    }
+                }
+                None => {
+                    // Файл є в кеші, але немає в індексі!
+                    println!("➕ Новий файл в кеші: {}", cache_file_path);
+                    return Ok(true);
+                }
+            }
+        }
+
+        // Перевіряємо чи не видалені файли з кешу (є в індексі, але немає в кеші)
+        let cache_files_set: std::collections::HashSet<_> =
+            cache_metadata.iter().map(|(path, _, _)| path.clone()).collect();
+
+        for indexed_file in indexed_files.keys() {
+            if !cache_files_set.contains(indexed_file) {
+                println!("➖ Файл видалено з кешу: {}", indexed_file);
+                return Ok(true);
+            }
+        }
+
+        // Все синхронізовано!
+        Ok(false)
+    }
+
     /// Швидка перевірка - порівнює метадані без копіювання файлів
     /// Повертає: Ok(true) - є зміни, Ok(false) - немає змін, Err - мережа недоступна
-    async fn check_for_changes(
-        remote_path: &str,
-        local_cache_path: &str,
-    ) -> Result<bool, String> {
+    async fn check_for_changes(remote_path: &str, local_cache_path: &str) -> Result<bool, String> {
         use std::path::Path;
 
         // 🔒 КРИТИЧНА ПЕРЕВІРКА: Чи доступна мережева папка?
@@ -266,7 +392,8 @@ impl AutoIndexer {
         }
 
         // Отримуємо першу частину шляху (папку верхнього рівня)
-        let first_component = relative_path.components()
+        let first_component = relative_path
+            .components()
             .next()
             .and_then(|c| c.as_os_str().to_str())
             .unwrap_or("");
@@ -286,13 +413,10 @@ impl AutoIndexer {
     }
 
     /// Синхронізує файли з сервера на локальний диск (копіює нові/оновлені, видаляє застарілі)
-    async fn sync_to_local_cache(
-        remote_path: &str,
-        local_cache_path: &str,
-    ) -> Result<(), String> {
+    async fn sync_to_local_cache(remote_path: &str, local_cache_path: &str) -> Result<(), String> {
+        use std::collections::HashSet;
         use std::fs;
         use std::path::Path;
-        use std::collections::HashSet;
         use walkdir::WalkDir;
 
         // Створюємо локальну папку якщо не існує
@@ -310,7 +434,8 @@ impl AutoIndexer {
         {
             if entry.file_type().is_file() {
                 let remote_file = entry.path();
-                let relative_path = remote_file.strip_prefix(remote_path)
+                let relative_path = remote_file
+                    .strip_prefix(remote_path)
                     .map_err(|e| format!("Помилка шляху: {}", e))?;
 
                 // Фільтруємо файли - тільки папки з роками
@@ -326,9 +451,14 @@ impl AutoIndexer {
                 // Перевіряємо, чи потрібно копіювати файл
                 let should_copy = if local_file.exists() {
                     // Порівнюємо дати модифікації та розміри
-                    if let (Ok(remote_meta), Ok(local_meta)) = (remote_file.metadata(), local_file.metadata()) {
-                        if let (Ok(remote_modified), Ok(local_modified)) = (remote_meta.modified(), local_meta.modified()) {
-                            remote_modified > local_modified || remote_meta.len() != local_meta.len()
+                    if let (Ok(remote_meta), Ok(local_meta)) =
+                        (remote_file.metadata(), local_file.metadata())
+                    {
+                        if let (Ok(remote_modified), Ok(local_modified)) =
+                            (remote_meta.modified(), local_meta.modified())
+                        {
+                            remote_modified > local_modified
+                                || remote_meta.len() != local_meta.len()
                         } else {
                             true
                         }
@@ -347,8 +477,9 @@ impl AutoIndexer {
                     }
 
                     // Копіюємо файл
-                    fs::copy(remote_file, &local_file)
-                        .map_err(|e| format!("Помилка копіювання {}: {}", remote_file.display(), e))?;
+                    fs::copy(remote_file, &local_file).map_err(|e| {
+                        format!("Помилка копіювання {}: {}", remote_file.display(), e)
+                    })?;
                 }
             }
         }
@@ -361,13 +492,15 @@ impl AutoIndexer {
         {
             if entry.file_type().is_file() {
                 let local_file = entry.path();
-                let relative_path = local_file.strip_prefix(local_cache_path)
+                let relative_path = local_file
+                    .strip_prefix(local_cache_path)
                     .map_err(|e| format!("Помилка шляху: {}", e))?;
 
                 // Якщо файлу немає на сервері - видаляємо
                 if !remote_files.contains(relative_path) {
-                    fs::remove_file(local_file)
-                        .map_err(|e| format!("Помилка видалення {}: {}", local_file.display(), e))?;
+                    fs::remove_file(local_file).map_err(|e| {
+                        format!("Помилка видалення {}: {}", local_file.display(), e)
+                    })?;
                 }
             }
         }
@@ -375,4 +508,3 @@ impl AutoIndexer {
         Ok(())
     }
 }
-
