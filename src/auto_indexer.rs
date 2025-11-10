@@ -16,8 +16,8 @@ pub struct AutoIndexer {
 impl AutoIndexer {
     pub fn new(search_engine: Arc<SearchEngine>) -> Self {
         Self {
-            // folder_path: "\\\\salem\\Documents\\Накази".to_string(),
-            folder_path: "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\".to_string(),
+            folder_path: "\\\\salem\\Documents\\Накази".to_string(),
+            // folder_path: "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\".to_string(),
             local_cache_path: "./nakazi_cache".to_string(),
             index_file_path: "documents_index.json".to_string(),
             inverted_index_path: "inverted_index.json".to_string(),
@@ -54,10 +54,14 @@ impl AutoIndexer {
                 }
 
                 // КРОК 1: Перевіряємо чи є зміни на сервері (для синхронізації)
-                let should_sync = match Self::check_for_changes(&folder_path, &local_cache_path).await {
+                let should_sync = match Self::check_for_changes(&folder_path, &local_cache_path)
+                    .await
+                {
                     Ok(has_changes) => {
                         if has_changes {
-                            println!("📥 [{time_str}] Виявлено зміни на сервері - копіюємо файли...");
+                            println!(
+                                "📥 [{time_str}] Виявлено зміни на сервері - копіюємо файли..."
+                            );
                         } else {
                             let end_time_str = Local::now().format("%H:%M:%S").to_string();
                             println!(
@@ -70,16 +74,15 @@ impl AutoIndexer {
                         // 🔒 ОФЛАЙН-РЕЖИМ: Мережа недоступна
                         let end_time_str = Local::now().format("%H:%M:%S").to_string();
                         println!("⚠️ [{end_time_str}] {}", e);
-                        println!(
-                            "💡 [{end_time_str}] Працюємо в офлайн-режимі з локальним кешем"
-                        );
+                        println!("💡 [{end_time_str}] Працюємо в офлайн-режимі з локальним кешем");
                         false // Не синхронізуємо, але продовжуємо перевіряти індекс
                     }
                 };
 
                 // КРОК 2: Копіюємо файли з сервера ТІЛЬКИ якщо є зміни
                 if should_sync {
-                    if let Err(e) = Self::sync_to_local_cache(&folder_path, &local_cache_path).await {
+                    if let Err(e) = Self::sync_to_local_cache(&folder_path, &local_cache_path).await
+                    {
                         let end_time_str = Local::now().format("%H:%M:%S").to_string();
                         println!("❌ [{end_time_str}] Помилка копіювання: {e}");
                         // Не продовжуємо цикл - перевіримо індекс нижче
@@ -88,13 +91,22 @@ impl AutoIndexer {
 
                 // КРОК 3: ЗАВЖДИ перевіряємо чи кеш синхронізований з індексом
                 // Це захищає від ситуації коли копіювання відбулося, але індексування перервалося
-                let cache_needs_indexing = match Self::check_cache_vs_index(&local_cache_path, &index_file_path).await {
+                let cache_needs_indexing = match Self::check_cache_vs_index(
+                    &local_cache_path,
+                    &index_file_path,
+                )
+                .await
+                {
                     Ok(needs_indexing) => {
                         if needs_indexing {
-                            println!("🔍 [{time_str}] Виявлено неіндексовані файли в кеші - запускаємо індексацію...");
+                            println!(
+                                "🔍 [{time_str}] Виявлено неіндексовані файли в кеші - запускаємо індексацію..."
+                            );
                         } else {
                             let end_time_str = Local::now().format("%H:%M:%S").to_string();
-                            println!("✅ [{end_time_str}] Кеш синхронізований з індексом - індексування не потрібне");
+                            println!(
+                                "✅ [{end_time_str}] Кеш синхронізований з індексом - індексування не потрібне"
+                            );
                         }
                         needs_indexing
                     }
@@ -257,12 +269,9 @@ impl AutoIndexer {
     /// Перевіряє чи є неіндексовані файли в локальному кеші
     /// Порівнює файли в nakazi_cache з тими що є в documents_index.json
     /// Повертає: Ok(true) - потрібно індексувати, Ok(false) - все синхронізовано
-    async fn check_cache_vs_index(
-        cache_path: &str,
-        index_file_path: &str,
-    ) -> Result<bool, String> {
-        use std::path::Path;
+    async fn check_cache_vs_index(cache_path: &str, index_file_path: &str) -> Result<bool, String> {
         use crate::document_record::DocumentIndex;
+        use std::path::Path;
 
         // Якщо кешу немає - нічого індексувати
         if !Path::new(cache_path).exists() {
@@ -299,15 +308,14 @@ impl AutoIndexer {
         for doc in &existing_index.documents {
             // Отримуємо відносний шлях (прибираємо префікс nakazi_cache/)
             let relative_path = if let Some(rel) = doc.file_path.strip_prefix(cache_path) {
-                rel.trim_start_matches('\\').trim_start_matches('/').to_string()
+                rel.trim_start_matches('\\')
+                    .trim_start_matches('/')
+                    .to_string()
             } else {
                 doc.file_path.clone()
             };
 
-            indexed_files.insert(
-                relative_path,
-                (doc.file_size, doc.last_modified),
-            );
+            indexed_files.insert(relative_path, (doc.file_size, doc.last_modified));
         }
 
         // Перевіряємо чи всі файли з кешу є в індексі
@@ -334,8 +342,10 @@ impl AutoIndexer {
         }
 
         // Перевіряємо чи не видалені файли з кешу (є в індексі, але немає в кеші)
-        let cache_files_set: std::collections::HashSet<_> =
-            cache_metadata.iter().map(|(path, _, _)| path.clone()).collect();
+        let cache_files_set: std::collections::HashSet<_> = cache_metadata
+            .iter()
+            .map(|(path, _, _)| path.clone())
+            .collect();
 
         for indexed_file in indexed_files.keys() {
             if !cache_files_set.contains(indexed_file) {

@@ -90,8 +90,8 @@ async fn start_cli_mode() {
 }
 
 async fn perform_initial_indexing() {
-    // let remote_folder = "\\\\salem\\Documents\\Накази";
-    let remote_folder = "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\";
+    let remote_folder = "\\\\salem\\Documents\\Накази";
+    // let remote_folder = "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\";
     let local_cache = "./nakazi_cache";
     let documents_index_path = "documents_index.json";
     let inverted_index_path = "inverted_index.json";

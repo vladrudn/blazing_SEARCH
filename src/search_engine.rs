@@ -202,13 +202,13 @@ impl SearchEngine {
 
         // Використовуємо інвертований індекс якщо доступний
         if let Some(ref inverted_index) = data.inverted_index {
-            println!("🔍 Пошук через інвертований індекс для слів: {:?}", query_words);
-            let (inv_docs, inv_words) = inverted_index.get_stats();
-            println!("📊 Інвертований індекс: {} документів, {} унікальних слів", inv_docs, inv_words);
+            // println!("🔍 Пошук через інвертований індекс для слів: {:?}", query_words);
+            // let (inv_docs, inv_words) = inverted_index.get_stats();
+            // println!("📊 Інвертований індекс: {} документів, {} унікальних слів", inv_docs, inv_words);
 
             // Отримуємо кандидатів документів з інвертованого індексу
             let candidates = inverted_index.search_fast(&query_words, &data.index, &mode);
-            println!("🎯 Знайдено {} кандидатів документів", candidates.len());
+            // println!("🎯 Знайдено {} кандидатів документів", candidates.len());
 
             for (doc_idx, paragraph_positions) in candidates {
                 if doc_idx < data.index.documents.len() {
