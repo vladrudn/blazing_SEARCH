@@ -1,0 +1,1 @@
+The user likes short, clear answers and explanations.
