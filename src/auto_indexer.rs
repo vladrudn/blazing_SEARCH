@@ -412,14 +412,16 @@ impl AutoIndexer {
         let is_year_folder = first_component.len() >= 4
             && first_component.chars().take(4).all(|c| c.is_ascii_digit());
 
-        // Виключаємо небажані файли та папки
-        let is_excluded = path_str.ends_with(".zip")
-            || path_str.ends_with(".xlsx")
-            || path_str.ends_with(".xls")
-            || path_str.contains("ЕРДР")
-            || path_str.contains(".git");
+        // Отримуємо ім'я файлу та розширення
+        let filename = relative_path.file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
 
-        is_year_folder && !is_excluded
+        // Синхронізуємо ТІЛЬКИ .docx файли (крім тимчасових ~$)
+        let is_docx = path_str.to_lowercase().ends_with(".docx");
+        let is_temp_office = filename.starts_with("~$");
+
+        is_year_folder && is_docx && !is_temp_office
     }
 
     /// Синхронізує файли з сервера на локальний диск (копіює нові/оновлені, видаляє застарілі)

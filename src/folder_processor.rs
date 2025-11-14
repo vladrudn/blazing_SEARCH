@@ -338,17 +338,29 @@ impl FolderProcessor {
     }
 
     fn is_docx_file(&self, path: &Path) -> bool {
-        // Пропускаємо тимчасові файли Office (~$)
+        // Пропускаємо тимчасові файли Office (~$) та системні файли
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            if filename.starts_with("~$") {
+            let fname_lower = filename.to_lowercase();
+            if filename.starts_with("~$")
+                || fname_lower == ".ds_store"
+                || fname_lower == "thumbs.db" {
                 return false;
             }
         }
 
-        path.extension()
+        // Перевіряємо розширення
+        let ext = path.extension()
             .and_then(|ext| ext.to_str())
-            .map(|ext| ext.to_lowercase() == "docx")
-            .unwrap_or(false)
+            .unwrap_or("");
+
+        let ext_lower = ext.to_lowercase();
+
+        // Виключаємо тимчасові та системні файли за розширенням
+        if ext_lower == "tmp" || ext_lower == "db" {
+            return false;
+        }
+
+        ext_lower == "docx"
     }
 
     fn process_docx_file(&self, file_path: &str) -> Result<DocumentRecord, String> {
