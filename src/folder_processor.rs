@@ -258,57 +258,11 @@ impl FolderProcessor {
             println!("🗑️  Видалено: {}", std::path::Path::new(&file_path).file_name().unwrap_or_default().to_string_lossy());
         }
 
-        // Створюємо мапу старих індексів для оновлення після сортування
-        let old_to_new_index_map: std::collections::HashMap<usize, usize> = if !self.new_or_updated_indices.is_empty() || !self.renamed_indices.is_empty() {
-            // Створюємо мапу файлових шляхів до індексів перед сортуванням
-            let file_path_to_old_index: std::collections::HashMap<String, usize> =
-                index.documents.iter().enumerate()
-                    .map(|(i, doc)| (doc.file_path.clone(), i))
-                    .collect();
-
-            // ❌ ВИМКНЕНО: Сортування змінює індекси документів,
-            // що вимагає повного перебудування інвертованого індексу (занадто повільно)
-            // Сортуємо документи за датою з назви файлу (від нових до старих)
-            // index.documents.sort_by(|a, b| {
-            //     let date_a = self.extract_date_from_filename(&a.file_path);
-            //     let date_b = self.extract_date_from_filename(&b.file_path);
-            //     self.compare_dates(date_a, date_b)
-            // });
-
-            // Створюємо мапу нових індексів
-            let file_path_to_new_index: std::collections::HashMap<String, usize> =
-                index.documents.iter().enumerate()
-                    .map(|(i, doc)| (doc.file_path.clone(), i))
-                    .collect();
-
-            // Створюємо мапу переходу зі старих індексів на нові
-            file_path_to_old_index.iter()
-                .filter_map(|(file_path, &old_idx)| {
-                    file_path_to_new_index.get(file_path)
-                        .map(|&new_idx| (old_idx, new_idx))
-                })
-                .collect()
-        } else {
-            // ❌ ВИМКНЕНО: Сортування змінює індекси документів,
-            // що вимагає повного перебудування інвертованого індексу (занадто повільно)
-            // Сортуємо документи за датою з назви файлу (від нових до старих)
-            // index.documents.sort_by(|a, b| {
-            //     let date_a = self.extract_date_from_filename(&a.file_path);
-            //     let date_b = self.extract_date_from_filename(&b.file_path);
-            //     self.compare_dates(date_a, date_b)
-            // });
-            std::collections::HashMap::new()
-        };
-
-        // Оновлюємо індекси нових/оновлених документів після сортування
-        self.new_or_updated_indices = self.new_or_updated_indices.iter()
-            .filter_map(|&old_idx| old_to_new_index_map.get(&old_idx).copied())
-            .collect();
-
-        // Оновлюємо індекси перейменованих документів після сортування  
-        self.renamed_indices = self.renamed_indices.iter()
-            .filter_map(|&old_idx| old_to_new_index_map.get(&old_idx).copied())
-            .collect();
+        // Сортування вимкнено, тому індекси не змінюються.
+        // Просто залишаємо new_or_updated_indices та renamed_indices як є.
+        //
+        // ПРИМІТКА: Раніше тут був код для оновлення індексів після сортування,
+        // але сортування вимкнено, тому цей код видалено для уникнення втрати індексів.
 
         // Оновлюємо загальну кількість документів
         index.total_documents = index.documents.len();
