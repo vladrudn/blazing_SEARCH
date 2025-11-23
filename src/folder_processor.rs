@@ -251,6 +251,9 @@ impl FolderProcessor {
         // Сортуємо індекси в зворотному порядку, щоб видаляти з кінця
         files_to_remove.sort_by(|a, b| b.0.cmp(&a.0));
 
+        // Збираємо індекси видалених документів для коригування new_or_updated_indices
+        let deleted_indices: Vec<usize> = files_to_remove.iter().map(|(pos, _)| *pos).collect();
+
         for (pos, file_path) in files_to_remove {
             let removed_doc = index.documents.remove(pos);
             index.total_words -= removed_doc.word_count;
@@ -258,11 +261,28 @@ impl FolderProcessor {
             println!("🗑️  Видалено: {}", std::path::Path::new(&file_path).file_name().unwrap_or_default().to_string_lossy());
         }
 
-        // Сортування вимкнено, тому індекси не змінюються.
-        // Просто залишаємо new_or_updated_indices та renamed_indices як є.
-        //
-        // ПРИМІТКА: Раніше тут був код для оновлення індексів після сортування,
-        // але сортування вимкнено, тому цей код видалено для уникнення втрати індексів.
+        // Після видалення документів потрібно скоригувати індекси в new_or_updated_indices
+        // Кожен видалений документ зсуває всі наступні індекси вниз на 1
+        if !deleted_indices.is_empty() {
+            // Видаляємо індекси видалених документів та коригуємо інші
+            self.new_or_updated_indices = self.new_or_updated_indices.iter()
+                .filter(|&&idx| !deleted_indices.contains(&idx)) // Видаляємо видалені
+                .map(|&idx| {
+                    // Рахуємо скільки видалених документів було ДО цього індексу
+                    let shift = deleted_indices.iter().filter(|&&del_idx| del_idx < idx).count();
+                    idx - shift
+                })
+                .collect();
+
+            // Те саме для renamed_indices
+            self.renamed_indices = self.renamed_indices.iter()
+                .filter(|&&idx| !deleted_indices.contains(&idx))
+                .map(|&idx| {
+                    let shift = deleted_indices.iter().filter(|&&del_idx| del_idx < idx).count();
+                    idx - shift
+                })
+                .collect();
+        }
 
         // Оновлюємо загальну кількість документів
         index.total_documents = index.documents.len();
