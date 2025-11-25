@@ -228,7 +228,6 @@ impl AtomicIndexManager {
             processed: processor.processed_files,
             skipped: processor.skipped_files,
             deleted: processor.deleted_files,
-            renamed: processor.renamed_indices.len(),
         };
 
         // Якщо є зміни, оновлюємо індекси атомарно
@@ -236,24 +235,27 @@ impl AtomicIndexManager {
             let update_time: DateTime<Local> = Local::now();
             let update_time_str = update_time.format("%H:%M:%S").to_string();
             
-            // Визначаємо що саме потрібно оновити
-            let content_changed = !processor.new_or_updated_indices.is_empty() || !processor.deleted_file_paths.is_empty();
-            let only_renamed = processor.new_or_updated_indices.is_empty() && processor.deleted_file_paths.is_empty() && !processor.renamed_indices.is_empty();
-            
-            if only_renamed {
-                println!("📊 [{update_time_str}] Виявлено тільки перейменування файлів - оновлюємо лише документний індекс...");
-            } else {
-                println!("📊 [{update_time_str}] Зміни виявлено, оновлення індексів...");
+            println!("📊 [{update_time_str}] Зміни виявлено, оновлення індексів...");
+
+            // КРОК 1: СПОЧАТКУ видаляємо записи про видалені файли та коригуємо індекси
+            // ВАЖЛИВО: використовуємо індекси ДО видалення з document_index
+            let mut updated_inv_index = existing_inv_index.unwrap_or_else(|| {
+                println!("⚠️  Створення нового порожнього інвертованого індексу");
+                let mut empty_idx = InvertedIndex::new();
+                empty_idx.total_documents = updated_doc_index.total_documents;
+                empty_idx
+            });
+
+            if !processor.deleted_indices.is_empty() {
+                println!("🗑️  Очищення інвертованого індексу від {} видалених документів (ДО оновлення нових)", processor.deleted_indices.len());
+                updated_inv_index.remove_deleted_documents(&processor.deleted_indices);
             }
 
-            // Оновлюємо інвертований індекс тільки для дійсно змінених документів
-            // Виключаємо перейменовані файли, оскільки їх контент не змінився
-            let mut updated_inv_index = if content_changed {
-                if !processor.renamed_indices.is_empty() {
-                    println!("ℹ️  Перейменовано {} файлів - інвертований індекс не потребує оновлення для них", processor.renamed_indices.len());
-                }
+            // КРОК 2: ПОТІМ оновлюємо інвертований індекс для нових/змінених документів
+            // Тепер всі індекси в інвертованому індексі скориговані і відповідають document_index
+            if !processor.new_or_updated_indices.is_empty() {
                 println!("🔄 Оновлення інвертованого індексу для {} нових/змінених документів", processor.new_or_updated_indices.len());
-                
+
                 // Детальний лог документів для відстеження
                 for &idx in &processor.new_or_updated_indices {
                     if let Some(doc) = updated_doc_index.documents.get(idx) {
@@ -262,29 +264,13 @@ impl AtomicIndexManager {
                         println!("   - Документ {}: НЕ ЗНАЙДЕНО В DOCUMENT_INDEX!", idx);
                     }
                 }
-                
-                // Критично важливо: передаємо правильний existing_inv_index
-                let current_inv_index = existing_inv_index.clone();
-                InvertedIndex::build_incremental(current_inv_index, &updated_doc_index, &processor.new_or_updated_indices)
-            } else {
-                // Якщо тільки перейменування, просто оновлюємо загальну кількість документів
-                println!("📝 Тільки перейменування - оновлюємо лише кількість документів");
-                let mut inv_index = existing_inv_index.unwrap_or_else(|| {
-                    println!("⚠️  Створення нового порожнього інвертованого індексу");
-                    let mut empty_idx = InvertedIndex::new();
-                    empty_idx.total_documents = updated_doc_index.total_documents;
-                    empty_idx
-                });
-                inv_index.total_documents = updated_doc_index.total_documents;
-                println!("📊 Оновлено total_documents в інвертованому індексі: {}", inv_index.total_documents);
-                inv_index
-            };
 
-            // Видаляємо записи про видалені файли з інвертованого індексу
-            if !processor.deleted_file_paths.is_empty() {
-                println!("🗑️  Очищення інвертованого індексу від {} видалених файлів", processor.deleted_file_paths.len());
-                updated_inv_index.remove_deleted_documents_by_paths(&processor.deleted_file_paths, &updated_doc_index);
+                // Оновлюємо інвертований індекс
+                updated_inv_index.update_incremental(&updated_doc_index, &processor.new_or_updated_indices);
             }
+
+            // Оновлюємо загальну кількість документів
+            updated_inv_index.total_documents = updated_doc_index.total_documents;
 
             // ❌ ВИМКНЕНО: Повне перебудування занадто повільне і блокує файли
             // Замість цього використовуємо інкрементне оновлення
@@ -492,12 +478,11 @@ pub struct UpdateStats {
     pub processed: usize,
     pub skipped: usize,
     pub deleted: usize,
-    pub renamed: usize,
 }
 
 impl UpdateStats {
     pub fn has_changes(&self) -> bool {
-        self.processed > 0 || self.deleted > 0 || self.renamed > 0
+        self.processed > 0 || self.deleted > 0
     }
 }
 
@@ -505,8 +490,8 @@ impl std::fmt::Display for UpdateStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "оброблено: {}, пропущено: {}, видалено: {}, перейменовано: {}",
-            self.processed, self.skipped, self.deleted, self.renamed
+            "оброблено: {}, пропущено: {}, видалено: {}",
+            self.processed, self.skipped, self.deleted
         )
     }
 }

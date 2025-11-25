@@ -16,8 +16,7 @@ pub struct FolderProcessor {
     pub deleted_files: usize,
     pub errors: Vec<String>,
     pub new_or_updated_indices: Vec<usize>,
-    pub deleted_file_paths: Vec<String>, // Змінено: зберігаємо шляхи файлів замість індексів
-    pub renamed_indices: Vec<usize>, // Індекси перейменованих документів (не потребують переіндексації)
+    pub deleted_indices: Vec<usize>, // Індекси документів для видалення (ДО видалення з document_index)
 }
 
 impl FolderProcessor {
@@ -28,8 +27,7 @@ impl FolderProcessor {
             deleted_files: 0,
             errors: Vec::new(),
             new_or_updated_indices: Vec::new(),
-            deleted_file_paths: Vec::new(), // Змінено: зберігаємо шляхи файлів замість індексів
-            renamed_indices: Vec::new(),
+            deleted_indices: Vec::new(),
         }
     }
 
@@ -102,21 +100,6 @@ impl FolderProcessor {
             .enumerate()
             .map(|(i, doc)| (doc.file_path.clone(), (i, doc.last_modified)))
             .collect::<std::collections::HashMap<String, (usize, u64)>>();
-            
-        // Створюємо мапу для виявлення потенційних перейменувань
-        // Ключ: (розмір_файлу, час_модифікації), значення: (індекс, шлях)
-        let mut size_time_to_doc = std::collections::HashMap::new();
-        for (i, doc) in index.documents.iter().enumerate() {
-            if let Ok(metadata) = std::fs::metadata(&doc.file_path) {
-                let size = metadata.len();
-                let modified = metadata.modified()
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                size_time_to_doc.insert((size, modified), (i, doc.file_path.clone()));
-            }
-        }
 
         // Створюємо сет існуючих файлів для виявлення видалених
         let mut found_files = std::collections::HashSet::new();
@@ -163,34 +146,8 @@ impl FolderProcessor {
                                 false
                             }
                         } else {
-                            // Перевіряємо чи це може бути перейменований файл
-                            let file_size = metadata.len();
-                            if let Some((old_doc_index, old_path)) = size_time_to_doc.get(&(file_size, file_last_modified)) {
-                                if old_path != &file_path {
-                                    // Знайдено потенційне перейменування
-                                    println!("🔄 Виявлено перейменування: {} -> {}", 
-                                             std::path::Path::new(old_path).file_name().unwrap_or_default().to_string_lossy(),
-                                             path.file_name().unwrap_or_default().to_string_lossy());
-                                    
-                                    // Оновлюємо шлях в існуючому документі
-                                    index.documents[*old_doc_index].file_path = file_path.clone();
-                                    
-                                    // Видаляємо зі старої мапи та додаємо в нову
-                                    existing_docs_map.remove(old_path);
-                                    existing_docs_map.insert(file_path.clone(), (*old_doc_index, file_last_modified));
-                                    
-                                    // Позначаємо як перейменований (не потребує переіндексації інвертованого індексу)
-                                    self.renamed_indices.push(*old_doc_index);
-                                    
-                                    false // Не потребує повторної обробки
-                                } else {
-                                    // Новий файл
-                                    true
-                                }
-                            } else {
-                                // Новий файл
-                                true
-                            }
+                            // Новий файл - потребує обробки
+                            true
                         };
 
                         if should_process {
@@ -243,16 +200,12 @@ impl FolderProcessor {
             }
         }
 
-        // Зберігаємо шляхи файлів, які будуть видалені, ДО видалення
-        for (_pos, file_path) in &files_to_remove {
-            self.deleted_file_paths.push(file_path.clone());
-        }
+        // Зберігаємо індекси видалених документів ДО видалення (для інвертованого індексу)
+        // НЕ сортуємо, щоб зберегти оригінальні індекси
+        self.deleted_indices = files_to_remove.iter().map(|(pos, _)| *pos).collect();
 
         // Сортуємо індекси в зворотному порядку, щоб видаляти з кінця
         files_to_remove.sort_by(|a, b| b.0.cmp(&a.0));
-
-        // Збираємо індекси видалених документів для коригування new_or_updated_indices
-        let deleted_indices: Vec<usize> = files_to_remove.iter().map(|(pos, _)| *pos).collect();
 
         for (pos, file_path) in files_to_remove {
             let removed_doc = index.documents.remove(pos);
@@ -263,22 +216,13 @@ impl FolderProcessor {
 
         // Після видалення документів потрібно скоригувати індекси в new_or_updated_indices
         // Кожен видалений документ зсуває всі наступні індекси вниз на 1
-        if !deleted_indices.is_empty() {
+        if !self.deleted_indices.is_empty() {
             // Видаляємо індекси видалених документів та коригуємо інші
             self.new_or_updated_indices = self.new_or_updated_indices.iter()
-                .filter(|&&idx| !deleted_indices.contains(&idx)) // Видаляємо видалені
+                .filter(|&&idx| !self.deleted_indices.contains(&idx)) // Видаляємо видалені
                 .map(|&idx| {
                     // Рахуємо скільки видалених документів було ДО цього індексу
-                    let shift = deleted_indices.iter().filter(|&&del_idx| del_idx < idx).count();
-                    idx - shift
-                })
-                .collect();
-
-            // Те саме для renamed_indices
-            self.renamed_indices = self.renamed_indices.iter()
-                .filter(|&&idx| !deleted_indices.contains(&idx))
-                .map(|&idx| {
-                    let shift = deleted_indices.iter().filter(|&&del_idx| del_idx < idx).count();
+                    let shift = self.deleted_indices.iter().filter(|&&del_idx| del_idx < idx).count();
                     idx - shift
                 })
                 .collect();
@@ -296,7 +240,6 @@ impl FolderProcessor {
         println!("\n📊 Результати інкрементної індексації:");
         println!("   - Оброблено файлів: {}", self.processed_files);
         println!("   - Пропущено незмінених: {}", self.skipped_files);
-        println!("   - Перейменовано файлів: {}", self.renamed_indices.len());
         println!("   - Видалено файлів: {}", self.deleted_files);
         println!("   - Помилок: {}", self.errors.len());
         println!("   - Загальна кількість слів: {}", index.total_words);

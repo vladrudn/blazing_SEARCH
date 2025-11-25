@@ -115,8 +115,9 @@ impl InvertedIndex {
         println!("✅ Видалення з інвертованого індексу завершено");
     }
 
-    // Залишаємо старий метод для зворотної сумісності, але позначаємо як deprecated
-    #[deprecated(note = "Use remove_deleted_documents_by_paths instead to avoid index mismatch issues")]
+    /// Видаляє записи для видалених документів з інвертованого індексу
+    /// ВАЖЛИВО: deleted_indices - це індекси ДО видалення з document_index
+    /// Після видалення коригує індекси всіх інших документів (зсуває вниз)
     pub fn remove_deleted_documents(&mut self, deleted_indices: &[usize]) {
         if deleted_indices.is_empty() {
             return;
@@ -130,7 +131,7 @@ impl InvertedIndex {
         }
 
         // Після видалення документів потрібно оновити індекси у всіх записах
-        // оскільки видалення зміщує індекси документів
+        // оскільки видалення зміщує індекси документів в document_index
         self.reindex_after_deletions(deleted_indices);
 
         println!("✅ Видалення з інвертованого індексу завершено");

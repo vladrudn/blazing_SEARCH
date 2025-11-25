@@ -33,7 +33,7 @@ impl AutoIndexer {
         let search_engine = Arc::clone(&self.search_engine);
 
         tokio::spawn(async move {
-            let mut interval_timer = interval(Duration::from_secs(300)); //оновлення наказів
+            let mut interval_timer = interval(Duration::from_secs(180)); //оновлення наказів
             let mut first_run = true;
 
             loop {
@@ -45,7 +45,7 @@ impl AutoIndexer {
                 if first_run {
                     println!("");
                     println!(
-                        "🚀 [{time_str}] Запуск автоматичної перевірки файлів кожні 300 секунд..."
+                        "🚀 [{time_str}] Запуск автоматичної перевірки файлів кожні 180 секунд..."
                     );
                     first_run = false;
                 } else {
