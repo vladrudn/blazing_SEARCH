@@ -785,7 +785,7 @@ function showAllExtracts(query) {
                 if (parentParagraphs.length > 0) {
                     parentParagraphs.forEach((parentText) => {
                         let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
-                        
+
                         if (isPersonalFile && parentText.startsWith('§')) {
                             // Стиль для § параграфів в особових файлах
                             style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
@@ -797,7 +797,7 @@ function showAllExtracts(query) {
                                 style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
                             }
                         }
-                        
+
                         content += `<div style="${style}">${parentText}</div>`;
                     });
                 }
@@ -961,7 +961,7 @@ function appendExtracts(newResults, query) {
                 if (parentParagraphs.length > 0) {
                     parentParagraphs.forEach((parentText) => {
                         let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
-                        
+
                         if (isPersonalFile && parentText.startsWith('§')) {
                             // Стиль для § параграфів в особових файлах
                             style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
@@ -973,7 +973,7 @@ function appendExtracts(newResults, query) {
                                 style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
                             }
                         }
-                        
+
                         content += `<div style="${style}">${parentText}</div>`;
                     });
                 }
@@ -1124,14 +1124,18 @@ function selectFile(fileIndex, query) {
     activeFileIndex = fileIndex;
     const file = displayedResults[fileIndex];
     const viewMode = getCurrentViewMode();
-    
+
+    console.log(`🔍 selectFile: viewMode="${viewMode}", fileName="${file.file_name}"`);
+
     // В режимі Витяг просто прокручуємо до файлу
     if (viewMode === 'fragments') {
+        console.log('📜 Прокручуємо до файлу в витягах');
         scrollToFileInExtracts(file.file_name);
         return;
     }
 
     // Режим Повний документ - показуємо один файл
+    console.log('📄 Показуємо повний документ');
     documentPreview.innerHTML = '';
 
     const documentContent = document.createElement('div');
@@ -1140,7 +1144,48 @@ function selectFile(fileIndex, query) {
     let firstMatchElement = null;
     let paragraphCount = 0;
 
+    console.log(`🔍 Перевірка умов: viewMode="${viewMode}", hasAllParagraphs=${!!file.all_paragraphs}, isArray=${Array.isArray(file.all_paragraphs)}`);
+
     if (viewMode === 'full-document' && file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
+        console.log('✅ Показуємо ВЕСЬ документ (параграф за параграфом) з жирними батьківськими параграфами');
+
+        // Визначаємо які параграфи є батьківськими для збігів
+        const parentIndices = new Set();
+        const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
+
+        file.matches.forEach((match) => {
+            let parentParagraphs = [];
+
+            if (isPersonalFile) {
+                // Для файлів "особовий" шукаємо батьківський параграф з §
+                for (let i = match.position - 1; i >= 0; i--) {
+                    const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+                    if (paragraph.startsWith('§')) {
+                        parentParagraphs = [paragraph];
+                        parentIndices.add(i);
+                        break;
+                    }
+                }
+            } else {
+                // Стандартна логіка для звичайних файлів
+                parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
+
+                // Знаходимо індекси батьківських параграфів
+                parentParagraphs.forEach((parentText) => {
+                    const idx = file.all_paragraphs.findIndex((p) => {
+                        const text = getParagraphText(p);
+                        return text.trim() === parentText.trim();
+                    });
+                    if (idx !== -1) {
+                        parentIndices.add(idx);
+                    }
+                });
+            }
+        });
+
+        console.log(`📝 Знайдено ${parentIndices.size} батьківських параграфів`);
+
+        // Відображаємо всі параграфи документа
         file.all_paragraphs.forEach((paragraphData, index) => {
             // Підтримка старого і нового формату
             const text = typeof paragraphData === 'string' ? paragraphData : paragraphData.text;
@@ -1159,6 +1204,21 @@ function selectFile(fileIndex, query) {
             paragraph.style.marginBottom = '0'; // Базовий відступ - 0
             paragraph.style.whiteSpace = 'pre-wrap'; // Зберігаємо переноси рядків
             paragraph.style.lineHeight = '1.4';
+
+            // Перевіряємо чи цей параграф є батьківським
+            const isParent = parentIndices.has(index);
+            if (isParent) {
+                paragraph.style.fontWeight = 'bold';
+
+                // Додаткове кольорове виділення для спеціальних параграфів
+                if (text.includes("Вважати такими, що прибули")) {
+                    paragraph.style.color = '#cc0000';
+                } else if (text.includes("Вважати такими, що вибули")) {
+                    paragraph.style.color = '#009900';
+                } else if (isPersonalFile && text.startsWith('§')) {
+                    paragraph.style.color = '#0066cc';
+                }
+            }
 
             let isMatch = false;
             for (const match of file.matches) {
@@ -1189,6 +1249,7 @@ function selectFile(fileIndex, query) {
             }
         });
     } else {
+        console.log('✅ Показуємо ВИТЯГИ з батьківськими параграфами');
         // Режим фрагментів - показуємо знайдені фрагменти з батьківськими параграфами
         file.matches.forEach((match) => {
             const extractSection = document.createElement('div');
@@ -1200,13 +1261,13 @@ function selectFile(fileIndex, query) {
 
             // Додаємо назву файлу як заголовок витягу
             let content = `<div style="font-size: 1.2em; color: #0066cc; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${file.file_name}</div>`;
-            
+
             // Отримуємо батьківські параграфи для контексту
-            
+
             if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
                 const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
                 let parentParagraphs = [];
-                
+
                 if (isPersonalFile) {
                     // Для файлів "особовий" шукаємо батьківський параграф з §
                     for (let i = match.position - 1; i >= 0; i--) {
@@ -1220,12 +1281,13 @@ function selectFile(fileIndex, query) {
                     // Стандартна логіка для звичайних файлів
                     parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
                 }
-                
-                // Додаємо батьківські параграфи
+
+                // Додаємо батьківські параграфи (жирні в режимі "Повний документ")
                 if (parentParagraphs.length > 0) {
                     parentParagraphs.forEach((parentText) => {
-                        let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
-                        
+                        // Всі батьківські параграфи жирні
+                        let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
+
                         if (isPersonalFile && parentText.startsWith('§')) {
                             // Стиль для § параграфів в особових файлах
                             style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
@@ -1237,7 +1299,7 @@ function selectFile(fileIndex, query) {
                                 style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
                             }
                         }
-                        
+
                         content += `<div style="${style}">${parentText}</div>`;
                     });
                 }
