@@ -516,17 +516,8 @@ async function performSearch() {
         displayResults(result, query);
 
         // Якщо є ще результати, запускаємо другий (повний) пошук
-        console.log('🔍 Checking if need full search:', {
-            displayedLength: displayedResults.length,
-            totalCount: totalCount,
-            needFullSearch: displayedResults.length < totalCount
-        });
-        
         if (displayedResults.length < totalCount) {
-            console.log('🚀 Starting full search...');
             performFullSearch(query);
-        } else {
-            console.log('✅ No full search needed - all results found');
         }
 
     } catch (error) {
@@ -539,11 +530,9 @@ async function performSearch() {
 }
 
 async function performFullSearch(query) {
-    console.log('🔍 performFullSearch called:', { query: query.substring(0, 20) });
     showLazyLoadingIndicator(); // Показуємо індикатор завантаження решти
     try {
         const viewMode = getCurrentViewMode();
-        console.log('🔍 performFullSearch: sending request with full_search: true');
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: {
@@ -561,11 +550,6 @@ async function performFullSearch(query) {
         }
 
         const result = await response.json();
-        console.log('✅ performFullSearch: received response:', {
-            count: result.count,
-            resultsLength: result.results ? result.results.length : 0,
-            hasError: !!result.error
-        });
 
         if (result.error) {
             // Не показуємо помилку, щоб не перекривати вже знайдені результати
@@ -573,7 +557,6 @@ async function performFullSearch(query) {
             return;
         }
 
-        console.log('🎯 performFullSearch: calling appendResults');
         appendResults(result, query);
 
     } catch (error) {
@@ -586,13 +569,6 @@ async function performFullSearch(query) {
 // Відображення результатів
 function displayResults(result, query) {
     const { count, processing_time_ms } = result;
-    
-    console.log('🔍 displayResults called:', { 
-        count, 
-        displayedResultsLength: displayedResults.length,
-        totalCount,
-        viewMode: getCurrentViewMode()
-    });
 
     // Показуємо інформаційну панель
     infoPanel.style.display = 'flex';
@@ -638,25 +614,14 @@ function displayResults(result, query) {
 
 function appendResults(result, query) {
     const newResults = result.results;
-    console.log('🔍 appendResults called:', { 
-        newResultsLength: newResults.length, 
-        currentDisplayedLength: displayedResults.length,
-        viewMode: getCurrentViewMode()
-    });
-    
+
     if (newResults.length === 0) {
-        console.log('❌ appendResults: немає нових результатів');
         return;
     }
 
     const currentLength = displayedResults.length;
     displayedResults = displayedResults.concat(newResults);
     totalCount = displayedResults.length;
-    
-    console.log('✅ appendResults: оновлено displayedResults:', {
-        oldLength: currentLength,
-        newLength: displayedResults.length
-    });
 
     // Завжди додаємо файли до списку для навігації
     const fragment = document.createDocumentFragment();
@@ -675,19 +640,16 @@ function appendResults(result, query) {
     if (getCurrentViewMode() === 'fragments') {
         if (currentLength === 0) {
             // Якщо це перші результати (перший етап був порожній), показуємо всі витяги
-            console.log('🔍 appendResults: показуємо всі витяги (перший етап був порожній)');
             // Спочатку очищуємо documentPreview, щоб не було старого контенту
             documentPreview.innerHTML = '';
             showAllExtracts(query);
         } else {
             // Додаємо нові витяги до існуючого контенту
-            console.log('🔍 appendResults: додаємо нові витяги до існуючого контенту');
             appendExtracts(newResults, query);
         }
     } else {
         // Режим Повний документ - якщо це перші результати, показуємо перший файл
         if (currentLength === 0) {
-            console.log('🔍 appendResults: показуємо перший файл (режим повний документ)');
             selectFile(0, query);
         }
     }
@@ -767,11 +729,6 @@ function createFileElement(file, index, query) {
 
 // Функція для відображення всіх витягів
 function showAllExtracts(query) {
-    console.log('🔍 showAllExtracts called:', {
-        displayedResultsLength: displayedResults.length,
-        query: query.substring(0, 20)
-    });
-    
     documentPreview.innerHTML = '';
     
     const documentContent = document.createElement('div');
@@ -886,14 +843,15 @@ function showAllExtracts(query) {
                     const currentText = match.context.trim();
                     const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
                     let sectionPrefix = '';
-                    
+
                     if (sectionMatch) {
                         sectionPrefix = sectionMatch[1].split('.')[0];
                     }
-                    
+
+                    let isBlocked = false;
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
                         const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
+
                         if (paragraph.toLowerCase().startsWith('підстава')) {
                             basisParagraph = paragraph;
                             break;
@@ -905,7 +863,16 @@ function showAllExtracts(query) {
                                 continue;
                             }
                         } else if (paragraph.length > 0) {
-                            additionalParagraphs.push(paragraph);
+                            if (!isBlocked) {
+                                // Перевіряємо чи параграф починається зі звання (без нумерації)
+                                if (startsWithPersonalStopWords(paragraph)) {
+                                    // Блокуємо цей та всі наступні параграфи до підстави
+                                    isBlocked = true;
+                                } else {
+                                    additionalParagraphs.push(paragraph);
+                                }
+                            }
+                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
                         }
                     }
                 }
@@ -1052,14 +1019,15 @@ function appendExtracts(newResults, query) {
                     const currentText = match.context.trim();
                     const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
                     let sectionPrefix = '';
-                    
+
                     if (sectionMatch) {
                         sectionPrefix = sectionMatch[1].split('.')[0];
                     }
-                    
+
+                    let isBlocked = false;
                     for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
                         const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
+
                         if (paragraph.toLowerCase().startsWith('підстава')) {
                             basisParagraph = paragraph;
                             break;
@@ -1071,7 +1039,16 @@ function appendExtracts(newResults, query) {
                                 continue;
                             }
                         } else if (paragraph.length > 0) {
-                            additionalParagraphs.push(paragraph);
+                            if (!isBlocked) {
+                                // Перевіряємо чи параграф починається зі звання (без нумерації)
+                                if (startsWithPersonalStopWords(paragraph)) {
+                                    // Блокуємо цей та всі наступні параграфи до підстави
+                                    isBlocked = true;
+                                } else {
+                                    additionalParagraphs.push(paragraph);
+                                }
+                            }
+                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
                         }
                     }
                 }
@@ -1162,15 +1139,6 @@ function selectFile(fileIndex, query) {
 
     let firstMatchElement = null;
     let paragraphCount = 0;
-    
-    // Діагностика для перевірки даних
-    console.log('🔍 Debug selectFile:', {
-        viewMode,
-        fileName: file.file_name,
-        hasAllParagraphs: !!file.all_paragraphs,
-        allParagraphsLength: file.all_paragraphs ? file.all_paragraphs.length : 0,
-        matchesLength: file.matches ? file.matches.length : 0
-    });
 
     if (viewMode === 'full-document' && file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
         file.all_paragraphs.forEach((paragraphData, index) => {
