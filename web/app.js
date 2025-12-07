@@ -806,9 +806,33 @@ function showAllExtracts(query) {
 
                         content += `<div style="${style}">${parentText}</div>`;
                     });
+
+                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
+                    if (file.all_paragraphs && parentParagraphs.length > 0) {
+                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
+
+                        // Шукаємо позицію останнього батьківського параграфу
+                        for (let i = match.position - 1; i >= 0; i--) {
+                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+                            if (paragraph === lastParentText) {
+                                // Знайшли останній батьківський параграф на позиції i
+                                // Перевіряємо що йде після нього (i+1)
+                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
+                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
+                                    const nextLower = nextParagraph.toLowerCase();
+                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
+                                        // Додаємо параграф з "видати"/"зарахувати"
+                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
+                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
+                                    }
+                                }
+                                break; // Знайшли, більше не шукаємо
+                            }
+                        }
+                    }
                 }
             }
-            
+
             // Основний текст збігу (знайдений фрагмент)
             content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
             
@@ -982,9 +1006,33 @@ function appendExtracts(newResults, query) {
 
                         content += `<div style="${style}">${parentText}</div>`;
                     });
+
+                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
+                    if (file.all_paragraphs && parentParagraphs.length > 0) {
+                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
+
+                        // Шукаємо позицію останнього батьківського параграфу
+                        for (let i = match.position - 1; i >= 0; i--) {
+                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+                            if (paragraph === lastParentText) {
+                                // Знайшли останній батьківський параграф на позиції i
+                                // Перевіряємо що йде після нього (i+1)
+                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
+                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
+                                    const nextLower = nextParagraph.toLowerCase();
+                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
+                                        // Додаємо параграф з "видати"/"зарахувати"
+                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
+                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
+                                    }
+                                }
+                                break; // Знайшли, більше не шукаємо
+                            }
+                        }
+                    }
                 }
             }
-            
+
             // Основний текст збігу (знайдений фрагмент)
             content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
             
@@ -1308,9 +1356,33 @@ function selectFile(fileIndex, query) {
 
                         content += `<div style="${style}">${parentText}</div>`;
                     });
+
+                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
+                    if (file.all_paragraphs && parentParagraphs.length > 0) {
+                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
+
+                        // Шукаємо позицію останнього батьківського параграфу
+                        for (let i = match.position - 1; i >= 0; i--) {
+                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+                            if (paragraph === lastParentText) {
+                                // Знайшли останній батьківський параграф на позиції i
+                                // Перевіряємо що йде після нього (i+1)
+                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
+                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
+                                    const nextLower = nextParagraph.toLowerCase();
+                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
+                                        // Додаємо параграф з "видати"/"зарахувати"
+                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
+                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
+                                    }
+                                }
+                                break; // Знайшли, більше не шукаємо
+                            }
+                        }
+                    }
                 }
             }
-            
+
             // Основний текст збігу (знайдений фрагмент)
             content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
             

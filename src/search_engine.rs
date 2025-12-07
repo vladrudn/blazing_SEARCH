@@ -14,6 +14,11 @@ static DATE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(\d{2})\.(\d{2})\.(\d{4})").unwrap()
 });
 
+// Регулярний вираз для пунктів з нумерацією (1.4., 2.3.3., тощо)
+static NUMBERING_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^\s*\d+(\.\d+)*\.").unwrap()
+});
+
 // Словник слів для припинення пошуку в файлах "особовий*"
 static PERSONAL_FILE_STOP_WORDS: &[&str] = &[
     "старш", "молодш", "солдат", "сержант", "штаб", "лейтенант", "майор", "матрос", "рекрут"
@@ -59,7 +64,6 @@ fn starts_with_personal_stop_words(paragraph: &str) -> bool {
     let lower_paragraph = binding.trim();
     PERSONAL_FILE_STOP_WORDS.iter().any(|stop_word| lower_paragraph.starts_with(stop_word))
 }
-
 
 impl SearchEngine {
     pub fn new() -> Self {
