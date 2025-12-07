@@ -1,5 +1,6 @@
 use crate::document_record::DocumentIndex;
 use crate::inverted_index::InvertedIndex;
+use crate::stemmer;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
@@ -12,8 +13,6 @@ static WORD_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[\p{L}\p{N}]+\b").u
 static DATE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(\d{2})\.(\d{2})\.(\d{4})").unwrap()
 });
-
-static UKRAINIAN_VOWELS: &str = "аеєиіїоуюяь";
 
 // Словник слів для припинення пошуку в файлах "особовий*"
 static PERSONAL_FILE_STOP_WORDS: &[&str] = &[
@@ -350,7 +349,7 @@ impl SearchEngine {
         // Розбиваємо на слова та обробляємо стемінг
         let words: Vec<String> = without_apostrophes
             .split_whitespace()
-            .map(|word| self.stem_word(word))
+            .map(|word| stemmer::stem_word(word))
             .collect();
 
         words.join(" ")
@@ -404,56 +403,6 @@ impl SearchEngine {
         true
     }
 
-    fn stem_word(&self, word: &str) -> String {
-        let word = word.to_lowercase();
-
-        // Обробка слів з дефісом
-        if word.contains('-') {
-            let parts: Vec<String> = word
-                .split('-')
-                .map(|part| self.stem_word_part(part))
-                .collect();
-            return parts.join("-");
-        }
-
-        self.stem_word_part(&word)
-    }
-
-    fn stem_word_part(&self, word: &str) -> String {
-        let mut result = word.to_string();
-
-        // Видаляємо закінчення -ець
-        if result.ends_with("ець") {
-            result = result[..result.len() - "ець".len()].to_string();
-        } else if result.ends_with("ця") {
-            result = result[..result.len() - "ця".len()].to_string();
-        } else if result.ends_with("цю") {
-            result = result[..result.len() - "цю".len()].to_string();
-        }
-
-        // Видаляємо закінчення -ого
-        if result.ends_with("ого") {
-            result = result[..result.len() - "ого".len()].to_string();
-        }
-        if result.ends_with("ому") {
-            result = result[..result.len() - "ому".len()].to_string();
-        }
-
-        // Видаляємо голосні в кінці
-        while !result.is_empty() {
-            if let Some(last_char) = result.chars().last() {
-                if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
-                    result.pop();
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        result
-    }
 
     pub fn get_stats(&self) -> (usize, usize) {
         let data = self.data.lock()

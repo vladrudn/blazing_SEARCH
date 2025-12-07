@@ -325,6 +325,12 @@ function stripWordPart(word) {
         word = word.slice(0, -1);
     }
 
+    // Спеціальне правило ТІЛЬКИ для імені "Федір" та його відмінків
+    // "федір" → "фед", "федора" → "федор" → "фед", "федору" → "федор" → "фед"
+    if (word.startsWith('фед') && (word.endsWith('ір') || word.endsWith('ор') || word.endsWith('і'))) {
+        word = 'фед';
+    }
+
     return word;
 }
 

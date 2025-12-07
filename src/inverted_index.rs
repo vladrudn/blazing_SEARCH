@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
 use crate::document_record::{DocumentRecord, DocumentIndex};
 use crate::search_engine::SearchMode;
+use crate::stemmer;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InvertedIndex {
@@ -347,63 +348,12 @@ impl InvertedIndex {
             .find_iter(text)
             .map(|m| {
                 let word_without_apostrophe = m.as_str().replace('\'', "");
-                Self::stem_word(&word_without_apostrophe)
+                stemmer::stem_word(&word_without_apostrophe)
             })
             .filter(|word| !word.is_empty() && word.len() >= 2) // Фільтруємо порожні та занадто короткі слова
             .collect()
     }
 
-    fn stem_word(word: &str) -> String {
-        let word = word.to_lowercase();
-
-        // Обробка слів з дефісом
-        if word.contains('-') {
-            let parts: Vec<String> = word.split('-')
-                .map(|part| Self::stem_word_part(part))
-                .collect();
-            return parts.join("-");
-        }
-
-        Self::stem_word_part(&word)
-    }
-
-    fn stem_word_part(word: &str) -> String {
-        let mut result = word.to_string();
-
-        // Видаляємо закінчення -ець
-        if result.ends_with("ець") {
-            result = result[..result.len() - "ець".len()].to_string();
-        } else if result.ends_with("ця") {
-            result = result[..result.len() - "ця".len()].to_string();
-        } else if result.ends_with("цю") {
-            result = result[..result.len() - "цю".len()].to_string();
-        }
-
-        // Видаляємо закінчення -ого
-        if result.ends_with("ого") {
-            result = result[..result.len() - "ого".len()].to_string();
-        }
-
-        if result.ends_with("ому") {
-            result = result[..result.len() - "ому".len()].to_string();
-        }
-
-        // Видаляємо голосні в кінці
-        static UKRAINIAN_VOWELS: &str = "аеєиіїоуюяь";
-        while !result.is_empty() {
-            if let Some(last_char) = result.chars().last() {
-                if UKRAINIAN_VOWELS.contains(last_char) || last_char == 'й' {
-                    result.pop();
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        result
-    }
 
     pub fn save_to_file(&self, path: &str) -> Result<(), String> {
         use std::path::Path;

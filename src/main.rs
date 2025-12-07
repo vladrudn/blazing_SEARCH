@@ -5,6 +5,7 @@ mod docx_parser;
 mod folder_processor;
 mod inverted_index;
 mod search_engine;
+mod stemmer;
 mod web_server;
 
 use atomic_index_manager::AtomicIndexManager;
