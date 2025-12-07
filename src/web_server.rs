@@ -220,7 +220,7 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
     });
 
     // Запускаємо автоматичний індексер
-    println!("🚀 Запуск автоматичного індексера (перевірка кожні 120 секунд)...");
+    println!("🚀 Запуск автоматичного індексера (перевірка кожні 3 хвилини)...");
     let auto_indexer = AutoIndexer::new(search_engine_arc);
     auto_indexer.start_background_indexing().await;
 
