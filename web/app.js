@@ -8,6 +8,8 @@ const processingTime = document.getElementById('processing-time');
 const infoPanel = document.getElementById('info-panel');
 const loader = document.getElementById('loader');
 const errorMessage = document.getElementById('error-message');
+const folderPathContainer = document.getElementById('folder-path-container');
+const folderPathInput = document.getElementById('folder-path-input');
 
 // Helper функція для отримання тексту параграфа (підтримка старого і нового формату)
 function getParagraphText(paragraphData) {
@@ -414,24 +416,37 @@ window.addEventListener('load', () => {
     document.querySelectorAll('input[name="view-mode"]').forEach(radio => {
         radio.addEventListener('change', () => {
             const currentQuery = searchInput.value.trim();
-            
+            const newMode = getCurrentViewMode();
+
+            // Показуємо/приховуємо поле шляху до папки
+            if (newMode === 'file-search') {
+                folderPathContainer.style.display = 'block';
+                searchInput.placeholder = 'Введіть назву файлу або частину назви...';
+            } else {
+                folderPathContainer.style.display = 'none';
+                searchInput.placeholder = 'Введіть текст для пошуку (мінімум 3 символи)...';
+            }
+
             if (displayedResults.length > 0 && currentQuery) {
-                const newMode = getCurrentViewMode();
-                
                 if (newMode === 'fragments') {
                     // Переключились на режим Витяг - показуємо всі витяги
                     showAllExtracts(currentQuery);
-                    
+
                     // Якщо ще не всі результати завантажені, запускаємо повний пошук
                     if (displayedResults.length < totalCount) {
                         performFullSearch(currentQuery);
                     }
-                } else {
+                } else if (newMode === 'full-document') {
                     // Переключились на режим Повний документ - показуємо перший файл
                     if (activeFileIndex >= 0) {
                         selectFile(activeFileIndex, currentQuery);
                     } else {
                         selectFile(0, currentQuery);
+                    }
+                } else if (newMode === 'file-search') {
+                    // Переключились на режим Пошук по файлам - виконуємо пошук файлів
+                    if (currentQuery) {
+                        performFileSearch(currentQuery);
                     }
                 }
             }
@@ -469,6 +484,13 @@ window.addEventListener('load', () => {
 // Основна функція пошуку
 async function performSearch() {
     const query = searchInput.value.trim();
+    const viewMode = getCurrentViewMode();
+
+    // Якщо це режим пошуку по файлам, викликаємо іншу функцію
+    if (viewMode === 'file-search') {
+        performFileSearch(query);
+        return;
+    }
 
     if (!query) {
         showError('Введіть текст для пошуку');
@@ -570,6 +592,133 @@ async function performFullSearch(query) {
     } finally {
         hideLazyLoadingIndicator();
     }
+}
+
+// Функція для пошуку файлів по назві
+async function performFileSearch(query) {
+    if (!query || query.length < 2) {
+        showError('Введіть мінімум 2 символи для пошуку файлів');
+        return;
+    }
+
+    const folderPath = folderPathInput.value.trim();
+    if (!folderPath) {
+        showError('Введіть шлях до папки');
+        return;
+    }
+
+    showLoader();
+    clearResults();
+    hideError();
+
+    try {
+        const response = await fetch('/api/search-files', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                query: query.toLowerCase(),
+                folder_path: folderPath
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+            showError(result.error);
+            return;
+        }
+
+        displayFileSearchResults(result);
+
+    } catch (error) {
+        showError(`Помилка під час пошуку файлів: ${error.message || error}`);
+    } finally {
+        hideLoader();
+        searchInput.focus();
+        searchInput.select();
+    }
+}
+
+// Функція для відображення результатів пошуку файлів
+function displayFileSearchResults(result) {
+    const { files, count, processing_time_ms } = result;
+
+    // Показуємо інформаційну панель
+    infoPanel.style.display = 'flex';
+    searchStats.textContent = `Знайдено: ${count} файл(ів)`;
+    processingTime.textContent = `Час пошуку: ${processing_time_ms}мс`;
+
+    // Показуємо контейнер результатів
+    resultsContainer.classList.remove('hidden');
+
+    // Очищуємо попередні результати
+    filesList.innerHTML = '';
+    documentPreview.innerHTML = '';
+
+    if (count === 0) {
+        filesList.innerHTML = '<div class="no-results">Нічого не знайдено</div>';
+        return;
+    }
+
+    // Відображаємо список файлів
+    const fragment = document.createDocumentFragment();
+    files.forEach((file, index) => {
+        const fileElement = document.createElement('div');
+        fileElement.className = 'file-item file-search-item';
+        fileElement.dataset.filepath = file.path;
+
+        const fileName = document.createElement('div');
+        fileName.className = 'file-name';
+        fileName.textContent = file.name;
+        fileName.style.cursor = 'pointer';
+
+        fileElement.appendChild(fileName);
+
+        // Обробник подвійного кліку для відкриття файлу
+        fileElement.addEventListener('dblclick', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await openFileDirectly(file.path);
+        });
+
+        // Обробник одинарного кліку для показу шляху
+        fileElement.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Зняти виділення з усіх файлів
+            document.querySelectorAll('.file-search-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Виділити поточний файл
+            fileElement.classList.add('active');
+
+            // Показати шлях файлу в preview
+            documentPreview.innerHTML = `
+                <div class="file-path-display">
+                    <h3>Інформація про файл</h3>
+                    <p><strong>Назва:</strong> ${file.name}</p>
+                    <p><strong>Повний шлях:</strong> ${file.path}</p>
+                    <button class="open-file-btn" onclick="openFileDirectly('${file.path.replace(/\\/g, '\\\\')}')">Відкрити файл</button>
+                    <p class="hint">Подвійний клік на файлі також відкриває його</p>
+                </div>
+            `;
+        });
+
+        fragment.appendChild(fileElement);
+    });
+
+    filesList.appendChild(fragment);
+
+    // Показуємо підказку в preview
+    documentPreview.innerHTML = '<div class="file-path-display"><p class="hint">Оберіть файл зі списку для перегляду деталей або двічі клікніть для відкриття</p></div>';
 }
 
 // Відображення результатів

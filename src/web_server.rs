@@ -5,6 +5,8 @@ use std::process::Command;
 use crate::search_engine::{SearchEngine, SearchMode};
 use crate::auto_indexer::AutoIndexer;
 use std::net::UdpSocket;
+use walkdir::WalkDir;
+use rayon::prelude::*;
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
@@ -17,6 +19,25 @@ pub struct SearchRequest {
 pub struct OpenFileRequest {
     pub file_path: String,
     pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct SearchFilesRequest {
+    pub query: String,
+    pub folder_path: String,
+}
+
+#[derive(Serialize)]
+pub struct FileInfo {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Serialize)]
+pub struct SearchFilesResponse {
+    pub files: Vec<FileInfo>,
+    pub count: usize,
+    pub processing_time_ms: u128,
 }
 
 #[derive(Serialize)]
@@ -211,6 +232,76 @@ pub async fn open_file_handler(
     }
 }
 
+pub async fn search_files_handler(
+    request: web::Json<SearchFilesRequest>,
+) -> Result<HttpResponse> {
+    let start_time = std::time::Instant::now();
+
+    if request.query.trim().is_empty() {
+        return Ok(HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Порожній запит пошуку".to_string(),
+        }));
+    }
+
+    if request.folder_path.trim().is_empty() {
+        return Ok(HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Не вказано шлях до папки".to_string(),
+        }));
+    }
+
+    let folder_path = std::path::Path::new(&request.folder_path);
+
+    // Перевіряємо чи існує папка
+    if !folder_path.exists() || !folder_path.is_dir() {
+        return Ok(HttpResponse::NotFound().json(ErrorResponse {
+            error: "Папка не знайдена або шлях неправильний".to_string(),
+        }));
+    }
+
+    let query_lower = request.query.to_lowercase();
+    const MAX_RESULTS: usize = 200; // Обмежуємо кількість результатів
+    const MAX_DEPTH: usize = 10; // Обмежуємо глибину рекурсії
+
+    // Збираємо всі шляхи файлів спочатку (швидко)
+    let all_entries: Vec<_> = WalkDir::new(folder_path)
+        .max_depth(MAX_DEPTH)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    // Паралельна фільтрація файлів за запитом
+    let mut found_files: Vec<FileInfo> = all_entries
+        .par_iter()
+        .filter_map(|entry| {
+            entry.file_name().to_str().and_then(|file_name| {
+                if file_name.to_lowercase().contains(&query_lower) {
+                    Some(FileInfo {
+                        name: file_name.to_string(),
+                        path: entry.path().to_string_lossy().to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+
+    // Обмежуємо кількість результатів
+    found_files.truncate(MAX_RESULTS);
+
+    let processing_time = start_time.elapsed().as_millis();
+
+    let response = SearchFilesResponse {
+        count: found_files.len(),
+        files: found_files,
+        processing_time_ms: processing_time,
+    };
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
 
 pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()> {
     let search_engine_arc = Arc::new(search_engine);
@@ -240,6 +331,7 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
             .wrap(Logger::default())
             .route("/", web::get().to(index_handler))
             .route("/api/search", web::post().to(search_handler))
+            .route("/api/search-files", web::post().to(search_files_handler))
             .route("/api/open-file", web::post().to(open_file_handler))
             .route("/static/{filename:.*}", web::get().to(static_handler))
             .route("/static/{filename:.*}", web::head().to(static_handler))

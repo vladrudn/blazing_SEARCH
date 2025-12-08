@@ -481,3 +481,84 @@ body {
         right: 0;
     }
 }
+
+/* Стилі для пошуку файлів */
+.folder-path-container {
+    width: 100%;
+    margin-top: 8px;
+}
+
+#folder-path-input {
+    width: 100%;
+    padding: 6px 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+}
+
+#folder-path-input:focus {
+    outline: none;
+    border-color: #667eea;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.file-path-display {
+    padding: 30px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin: 20px;
+}
+
+.file-path-display h3 {
+    color: #1565c0;
+    margin-bottom: 20px;
+    font-size: 1.4rem;
+}
+
+.file-path-display p {
+    margin-bottom: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.file-path-display strong {
+    color: #333;
+    font-weight: 600;
+}
+
+.file-path-display .hint {
+    color: #666;
+    font-style: italic;
+    margin-top: 15px;
+    font-size: 13px;
+}
+
+.open-file-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 15px;
+    transition: all 0.3s ease;
+}
+
+.open-file-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.file-search-item {
+    transition: all 0.2s ease;
+}
+
+.file-search-item:hover {
+    background-color: #e3f2fd;
+    border-left: 4px solid #1976d2;
+}
