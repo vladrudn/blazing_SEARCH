@@ -391,25 +391,16 @@ window.addEventListener('load', () => {
         this.select();
     });
 
-    // Обробка вставки тексту
+    // Обробка вставки тексту - дозволяємо браузерне автозаповнення
     searchInput.addEventListener('paste', function(e) {
-        e.preventDefault();
-        const pastedText = e.clipboardData.getData('text');
-        const processedText = processSearchInput(pastedText);
-
-        const start = this.selectionStart;
-        const end = this.selectionEnd;
-        const text = this.value;
-        const before = text.substring(0, start);
-        const after = text.substring(end);
-
-        this.value = before + processedText + after;
-        this.selectionStart = this.selectionEnd = start + processedText.length;
-
-        // Автоматично запускаємо пошук після обробки вставленого тексту
+        // Не перешкоджаємо браузерному paste, це дозволяє зберігати автозаповнення
+        // Обробка вставленого тексту відбудеться через input event
         setTimeout(() => {
-            performSearch();
-        }, 5); // Невелика затримка для завершення обробки DOM
+            // Обробляємо введений текст після вставки
+            if (searchInput.value.trim().length >= 3) {
+                performSearch();
+            }
+        }, 50);
     });
 
     // Обробник зміни режиму відображення
@@ -551,7 +542,7 @@ async function performSearch() {
         showError(`Помилка під час пошуку: ${error.message || error}`);
     } finally {
         hideLoader();
-        searchInput.focus();
+        // searchInput.focus();
         searchInput.select();
     }
 }
@@ -639,8 +630,6 @@ async function performFileSearch(query) {
         showError(`Помилка під час пошуку файлів: ${error.message || error}`);
     } finally {
         hideLoader();
-        searchInput.focus();
-        searchInput.select();
     }
 }
 
@@ -881,203 +870,191 @@ function createFileElement(file, index, query) {
     return fileElement;
 }
 
+// Створює HTML контент для одного витягу (match)
+function buildExtractContent(file, match, query) {
+    const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
+    let content = '';
+
+    // Отримуємо батьківські параграфи для контексту
+    if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
+        let parentParagraphs = [];
+
+        if (isPersonalFile) {
+            // Для файлів "особовий" шукаємо батьківський параграф з §
+            for (let i = match.position - 1; i >= 0; i--) {
+                const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+                if (paragraph.startsWith('§')) {
+                    parentParagraphs = [paragraph];
+                    break;
+                }
+            }
+        } else {
+            parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
+        }
+
+        // Додаємо батьківські параграфи
+        if (parentParagraphs.length > 0) {
+            parentParagraphs.forEach((parentText) => {
+                content += `<div style="${getParentStyle(parentText, isPersonalFile)}">${parentText}</div>`;
+            });
+
+            // Додаємо параграф з "видати"/"зарахувати" якщо є
+            content += getVydatyZarakhuvatyParagraph(file, match, parentParagraphs);
+        }
+    }
+
+    // Основний текст збігу
+    content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
+
+    // Додаємо додаткові параграфи
+    if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
+        const { additionalParagraphs, basisParagraph } = getAdditionalParagraphs(file, match, isPersonalFile);
+
+        additionalParagraphs.forEach(p => {
+            content += '<div style="color: #555; line-height: 1.4; margin-top: 5px;">' +
+                      p.replace(/\n/g, '<br>') + '</div>';
+        });
+
+        if (basisParagraph && !isPersonalFile) {
+            content += '<div style="font-style: italic; color: #666; line-height: 1.4;">' +
+                      basisParagraph.replace(/\n/g, '<br>') + '</div>';
+        }
+    }
+
+    return content;
+}
+
+// Повертає стиль для батьківського параграфу
+function getParentStyle(parentText, isPersonalFile) {
+    if (isPersonalFile && parentText.startsWith('§')) {
+        return "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
+    }
+    if (parentText.match(/^\d+\.\s+/)) {
+        if (parentText.includes("Вважати такими, що прибули")) {
+            return "color: #cc0000; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
+        }
+        if (parentText.includes("Вважати такими, що вибули")) {
+            return "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
+        }
+    }
+    return "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
+}
+
+// Повертає HTML для параграфу "видати"/"зарахувати" якщо він є після батьківського
+function getVydatyZarakhuvatyParagraph(file, match, parentParagraphs) {
+    if (!file.all_paragraphs || parentParagraphs.length === 0) return '';
+
+    const lastParentText = parentParagraphs[parentParagraphs.length - 1];
+
+    for (let i = match.position - 1; i >= 0; i--) {
+        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+        if (paragraph === lastParentText) {
+            if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
+                const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
+                const nextLower = nextParagraph.toLowerCase();
+                if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
+                    return '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
+                          nextParagraph.replace(/\n/g, '<br>') + '</div>';
+                }
+            }
+            break;
+        }
+    }
+    return '';
+}
+
+// Збирає додаткові параграфи після match
+function getAdditionalParagraphs(file, match, isPersonalFile) {
+    const additionalParagraphs = [];
+    let basisParagraph = null;
+    let isBlocked = false;
+
+    if (isPersonalFile) {
+        for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
+            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+
+            if (paragraph.startsWith('§')) break;
+            if (paragraph.length > 0 && !isBlocked) {
+                if (shouldBlockParagraphInPersonalFile(paragraph)) {
+                    isBlocked = true;
+                } else {
+                    additionalParagraphs.push(paragraph);
+                }
+            }
+        }
+    } else {
+        const currentText = match.context.trim();
+        const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
+        const sectionPrefix = sectionMatch ? sectionMatch[1].split('.')[0] : '';
+
+        for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
+            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
+
+            if (paragraph.toLowerCase().startsWith('підстава')) {
+                basisParagraph = paragraph;
+                break;
+            } else if (paragraph.match(/^\d+\./)) {
+                const newSectionMatch = paragraph.match(/^(\d+)\./);
+                if (newSectionMatch && sectionPrefix && newSectionMatch[1] !== sectionPrefix) {
+                    break;
+                } else if (paragraph.match(/^\d+(\.\d+)+\./)) {
+                    continue;
+                }
+            } else if (paragraph.length > 0 && !isBlocked) {
+                if (startsWithPersonalStopWords(paragraph)) {
+                    isBlocked = true;
+                } else {
+                    additionalParagraphs.push(paragraph);
+                }
+            }
+        }
+    }
+
+    return { additionalParagraphs, basisParagraph };
+}
+
+// Створює DOM елемент для витягу
+function createExtractElement(file, match, query) {
+    const extractSection = document.createElement('div');
+    extractSection.className = 'extract-section';
+    extractSection.style.cssText = 'padding: 15px 0 15px 20px; border-bottom: 1px solid #e0e0e0; border-left: 4px solid #ffc107; margin-bottom: 15px;';
+    extractSection.innerHTML = buildExtractContent(file, match, query);
+    return extractSection;
+}
+
+// Створює контейнер файлу з заголовком
+function createFileContainer(fileName) {
+    const fileContainer = document.createElement('div');
+    fileContainer.className = 'file-container';
+    fileContainer.style.marginBottom = '30px';
+
+    const fileHeader = document.createElement('div');
+    fileHeader.style.cssText = 'font-size: 1.2em; color: #0066cc; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #0066cc; font-weight: bold;';
+    fileHeader.textContent = fileName;
+    fileContainer.appendChild(fileHeader);
+
+    return fileContainer;
+}
+
 // Функція для відображення всіх витягів
 function showAllExtracts(query) {
     documentPreview.innerHTML = '';
-    
+
     const documentContent = document.createElement('div');
     documentContent.className = 'document-content';
-    
+
     displayedResults.forEach((file) => {
-        // Створюємо контейнер для файлу
-        const fileContainer = document.createElement('div');
-        fileContainer.className = 'file-container';
-        fileContainer.style.marginBottom = '30px';
-        
-        // Додаємо назву файлу як заголовок один раз
-        const fileHeader = document.createElement('div');
-        fileHeader.style.fontSize = '1.2em';
-        fileHeader.style.color = '#0066cc';
-        fileHeader.style.marginBottom = '15px';
-        fileHeader.style.paddingBottom = '8px';
-        fileHeader.style.borderBottom = '2px solid #0066cc';
-        fileHeader.style.fontWeight = 'bold';
-        fileHeader.textContent = file.file_name;
-        fileContainer.appendChild(fileHeader);
-        
-        // Додаємо всі витяги для цього файлу
+        const fileContainer = createFileContainer(file.file_name);
+
         file.matches.forEach((match) => {
-            const extractSection = document.createElement('div');
-            extractSection.className = 'extract-section';
-            extractSection.style.padding = '15px 0 15px 20px';
-            extractSection.style.borderBottom = '1px solid #e0e0e0';
-            extractSection.style.borderLeft = '4px solid #ffc107';
-            extractSection.style.marginBottom = '15px';
-
-            let content = '';
-            
-            // Отримуємо батьківські параграфи для контексту
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                let parentParagraphs = [];
-                
-                if (isPersonalFile) {
-                    // Для файлів "особовий" шукаємо батьківський параграф з §
-                    for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        if (paragraph.startsWith('§')) {
-                            parentParagraphs = [paragraph];
-                            break;
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
-                }
-                
-                // Додаємо батьківські параграфи
-                if (parentParagraphs.length > 0) {
-                    parentParagraphs.forEach((parentText) => {
-                        let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
-
-                        if (isPersonalFile && parentText.startsWith('§')) {
-                            // Стиль для § параграфів в особових файлах
-                            style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                        } else if (parentText.match(/^\d+\.\s+/)) {
-                            // Перевіряємо чи це параграф першого рівня з особливими фразами
-                            if (parentText.includes("Вважати такими, що прибули")) {
-                                style = "color: #cc0000; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            } else if (parentText.includes("Вважати такими, що вибули")) {
-                                style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            }
-                        }
-
-                        content += `<div style="${style}">${parentText}</div>`;
-                    });
-
-                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
-                    if (file.all_paragraphs && parentParagraphs.length > 0) {
-                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
-
-                        // Шукаємо позицію останнього батьківського параграфу
-                        for (let i = match.position - 1; i >= 0; i--) {
-                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                            if (paragraph === lastParentText) {
-                                // Знайшли останній батьківський параграф на позиції i
-                                // Перевіряємо що йде після нього (i+1)
-                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
-                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
-                                    const nextLower = nextParagraph.toLowerCase();
-                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
-                                        // Додаємо параграф з "видати"/"зарахувати"
-                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
-                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
-                                    }
-                                }
-                                break; // Знайшли, більше не шукаємо
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Основний текст збігу (знайдений фрагмент)
-            content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
-            
-            // Додаємо додаткові параграфи до підстави або до § для файлів "особовий"
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                let additionalParagraphs = [];
-                let basisParagraph = null;
-                
-                // Перевіряємо чи це файл "особовий"
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                
-                if (isPersonalFile) {
-                    // Логіка для файлів "особовий": витягуємо до знака § (але § не показуємо)
-                    // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
-                    let isBlocked = false;
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
-                        if (paragraph.startsWith('§')) {
-                            // Знайшли наступний § - зупиняємось
-                            break;
-                        } else if (paragraph.length > 0) {
-                            if (!isBlocked) {
-                                // Перевіряємо чи цей параграф потрібно блокувати (заборонені слова або нумерація)
-                                if (shouldBlockParagraphInPersonalFile(paragraph)) {
-                                    // Блокуємо цей та всі наступні параграфи в розділі
-                                    isBlocked = true;
-                                } else {
-                                    // Додаємо параграф, якщо він не заборонений
-                                    additionalParagraphs.push(paragraph);
-                                }
-                            }
-                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    const currentText = match.context.trim();
-                    const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
-                    let sectionPrefix = '';
-
-                    if (sectionMatch) {
-                        sectionPrefix = sectionMatch[1].split('.')[0];
-                    }
-
-                    let isBlocked = false;
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-
-                        if (paragraph.toLowerCase().startsWith('підстава')) {
-                            basisParagraph = paragraph;
-                            break;
-                        } else if (paragraph.match(/^\d+\./)) {
-                            const newSectionMatch = paragraph.match(/^(\d+)\./);
-                            if (newSectionMatch && sectionPrefix && newSectionMatch[1] !== sectionPrefix) {
-                                break;
-                            } else if (paragraph.match(/^\d+(\.\d+)+\./)) {
-                                continue;
-                            }
-                        } else if (paragraph.length > 0) {
-                            if (!isBlocked) {
-                                // Перевіряємо чи параграф починається зі звання (без нумерації)
-                                if (startsWithPersonalStopWords(paragraph)) {
-                                    // Блокуємо цей та всі наступні параграфи до підстави
-                                    isBlocked = true;
-                                } else {
-                                    additionalParagraphs.push(paragraph);
-                                }
-                            }
-                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
-                        }
-                    }
-                }
-                
-                additionalParagraphs.forEach(p => {
-                    content += '<div style="color: #555; line-height: 1.4; margin-top: 5px;">' + 
-                              p.replace(/\n/g, '<br>') + '</div>';
-                });
-                
-                if (basisParagraph && !isPersonalFile) {
-                    // Показуємо basisParagraph тільки для звичайних файлів (не особових)
-                    const basisStyle = 'font-style: italic; color: #666; line-height: 1.4;';
-                    content += `<div style="${basisStyle}">` + 
-                              basisParagraph.replace(/\n/g, '<br>') + '</div>';
-                }
-            }
-
-            extractSection.innerHTML = content;
-            fileContainer.appendChild(extractSection);
+            fileContainer.appendChild(createExtractElement(file, match, query));
         });
-        
+
         documentContent.appendChild(fileContainer);
     });
-    
+
     documentPreview.appendChild(documentContent);
-    
-    // Прокручуємо до початку результатів
+
     setTimeout(() => {
         documentPreview.scrollTop = 0;
     }, 100);
@@ -1087,191 +1064,14 @@ function showAllExtracts(query) {
 function appendExtracts(newResults, query) {
     const documentContent = document.querySelector('.document-content');
     if (!documentContent) return;
-    
+
     newResults.forEach((file) => {
-        // Створюємо контейнер для файлу
-        const fileContainer = document.createElement('div');
-        fileContainer.className = 'file-container';
-        fileContainer.style.marginBottom = '30px';
-        
-        // Додаємо назву файлу як заголовок один раз
-        const fileHeader = document.createElement('div');
-        fileHeader.style.fontSize = '1.2em';
-        fileHeader.style.color = '#0066cc';
-        fileHeader.style.marginBottom = '15px';
-        fileHeader.style.paddingBottom = '8px';
-        fileHeader.style.borderBottom = '2px solid #0066cc';
-        fileHeader.style.fontWeight = 'bold';
-        fileHeader.textContent = file.file_name;
-        fileContainer.appendChild(fileHeader);
-        
-        // Додаємо всі витяги для цього файлу
+        const fileContainer = createFileContainer(file.file_name);
+
         file.matches.forEach((match) => {
-            const extractSection = document.createElement('div');
-            extractSection.className = 'extract-section';
-            extractSection.style.padding = '15px 0 15px 20px';
-            extractSection.style.borderBottom = '1px solid #e0e0e0';
-            extractSection.style.borderLeft = '4px solid #ffc107';
-            extractSection.style.marginBottom = '15px';
-
-            let content = '';
-            
-            // Отримуємо батьківські параграфи для контексту
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                let parentParagraphs = [];
-                
-                if (isPersonalFile) {
-                    // Для файлів "особовий" шукаємо батьківський параграф з §
-                    for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        if (paragraph.startsWith('§')) {
-                            parentParagraphs = [paragraph];
-                            break;
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
-                }
-                
-                // Додаємо батьківські параграфи
-                if (parentParagraphs.length > 0) {
-                    parentParagraphs.forEach((parentText) => {
-                        let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: 500; line-height: 1.4;";
-
-                        if (isPersonalFile && parentText.startsWith('§')) {
-                            // Стиль для § параграфів в особових файлах
-                            style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                        } else if (parentText.match(/^\d+\.\s+/)) {
-                            // Перевіряємо чи це параграф першого рівня з особливими фразами
-                            if (parentText.includes("Вважати такими, що прибули")) {
-                                style = "color: #cc0000; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            } else if (parentText.includes("Вважати такими, що вибули")) {
-                                style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            }
-                        }
-
-                        content += `<div style="${style}">${parentText}</div>`;
-                    });
-
-                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
-                    if (file.all_paragraphs && parentParagraphs.length > 0) {
-                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
-
-                        // Шукаємо позицію останнього батьківського параграфу
-                        for (let i = match.position - 1; i >= 0; i--) {
-                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                            if (paragraph === lastParentText) {
-                                // Знайшли останній батьківський параграф на позиції i
-                                // Перевіряємо що йде після нього (i+1)
-                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
-                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
-                                    const nextLower = nextParagraph.toLowerCase();
-                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
-                                        // Додаємо параграф з "видати"/"зарахувати"
-                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
-                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
-                                    }
-                                }
-                                break; // Знайшли, більше не шукаємо
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Основний текст збігу (знайдений фрагмент)
-            content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
-            
-            // Додаємо додаткові параграфи до підстави або до § для файлів "особовий"
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                let additionalParagraphs = [];
-                let basisParagraph = null;
-                
-                // Перевіряємо чи це файл "особовий"
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                
-                if (isPersonalFile) {
-                    // Логіка для файлів "особовий": витягуємо до знака § (але § не показуємо)
-                    // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
-                    let isBlocked = false;
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
-                        if (paragraph.startsWith('§')) {
-                            // Знайшли наступний § - зупиняємось
-                            break;
-                        } else if (paragraph.length > 0) {
-                            if (!isBlocked) {
-                                // Перевіряємо чи цей параграф потрібно блокувати (заборонені слова або нумерація)
-                                if (shouldBlockParagraphInPersonalFile(paragraph)) {
-                                    // Блокуємо цей та всі наступні параграфи в розділі
-                                    isBlocked = true;
-                                } else {
-                                    // Додаємо параграф, якщо він не заборонений
-                                    additionalParagraphs.push(paragraph);
-                                }
-                            }
-                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    const currentText = match.context.trim();
-                    const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
-                    let sectionPrefix = '';
-
-                    if (sectionMatch) {
-                        sectionPrefix = sectionMatch[1].split('.')[0];
-                    }
-
-                    let isBlocked = false;
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-
-                        if (paragraph.toLowerCase().startsWith('підстава')) {
-                            basisParagraph = paragraph;
-                            break;
-                        } else if (paragraph.match(/^\d+\./)) {
-                            const newSectionMatch = paragraph.match(/^(\d+)\./);
-                            if (newSectionMatch && sectionPrefix && newSectionMatch[1] !== sectionPrefix) {
-                                break;
-                            } else if (paragraph.match(/^\d+(\.\d+)+\./)) {
-                                continue;
-                            }
-                        } else if (paragraph.length > 0) {
-                            if (!isBlocked) {
-                                // Перевіряємо чи параграф починається зі звання (без нумерації)
-                                if (startsWithPersonalStopWords(paragraph)) {
-                                    // Блокуємо цей та всі наступні параграфи до підстави
-                                    isBlocked = true;
-                                } else {
-                                    additionalParagraphs.push(paragraph);
-                                }
-                            }
-                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
-                        }
-                    }
-                }
-                
-                additionalParagraphs.forEach(p => {
-                    content += '<div style="color: #555; line-height: 1.4; margin-top: 5px;">' + 
-                              p.replace(/\n/g, '<br>') + '</div>';
-                });
-                
-                if (basisParagraph && !isPersonalFile) {
-                    // Показуємо basisParagraph тільки для звичайних файлів (не особових)
-                    const basisStyle = 'font-style: italic; color: #666; line-height: 1.4;';
-                    content += `<div style="${basisStyle}">` + 
-                              basisParagraph.replace(/\n/g, '<br>') + '</div>';
-                }
-            }
-
-            extractSection.innerHTML = content;
-            fileContainer.appendChild(extractSection);
+            fileContainer.appendChild(createExtractElement(file, match, query));
         });
-        
+
         documentContent.appendChild(fileContainer);
     });
 }
@@ -1327,29 +1127,21 @@ function selectFile(fileIndex, query) {
     const file = displayedResults[fileIndex];
     const viewMode = getCurrentViewMode();
 
-    console.log(`🔍 selectFile: viewMode="${viewMode}", fileName="${file.file_name}"`);
-
     // В режимі Витяг просто прокручуємо до файлу
     if (viewMode === 'fragments') {
-        console.log('📜 Прокручуємо до файлу в витягах');
         scrollToFileInExtracts(file.file_name);
         return;
     }
 
     // Режим Повний документ - показуємо один файл
-    console.log('📄 Показуємо повний документ');
     documentPreview.innerHTML = '';
 
     const documentContent = document.createElement('div');
     documentContent.className = 'document-content';
 
     let firstMatchElement = null;
-    let paragraphCount = 0;
-
-    console.log(`🔍 Перевірка умов: viewMode="${viewMode}", hasAllParagraphs=${!!file.all_paragraphs}, isArray=${Array.isArray(file.all_paragraphs)}`);
 
     if (viewMode === 'full-document' && file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-        console.log('✅ Показуємо ВЕСЬ документ (параграф за параграфом) з жирними батьківськими параграфами');
 
         // Визначаємо які параграфи є батьківськими для збігів
         const parentIndices = new Set();
@@ -1384,8 +1176,6 @@ function selectFile(fileIndex, query) {
                 });
             }
         });
-
-        console.log(`📝 Знайдено ${parentIndices.size} батьківських параграфів`);
 
         // Відображаємо всі параграфи документа
         file.all_paragraphs.forEach((paragraphData, index) => {
@@ -1441,7 +1231,6 @@ function selectFile(fileIndex, query) {
             }
 
             documentContent.appendChild(paragraph);
-            paragraphCount++;
 
             // Додаємо розриви рядків після параграфа якщо вони є
             for (let i = 0; i < lineBreaksAfter; i++) {
@@ -1451,168 +1240,15 @@ function selectFile(fileIndex, query) {
             }
         });
     } else {
-        console.log('✅ Показуємо ВИТЯГИ з батьківськими параграфами');
         // Режим фрагментів - показуємо знайдені фрагменти з батьківськими параграфами
         file.matches.forEach((match) => {
             const extractSection = document.createElement('div');
             extractSection.className = 'extract-section';
-            extractSection.style.padding = '15px 0 15px 20px';
-            extractSection.style.borderBottom = '2px solid #e0e0e0';
-            extractSection.style.borderLeft = '4px solid #ffc107';
-            extractSection.style.marginBottom = '20px';
+            extractSection.style.cssText = 'padding: 15px 0 15px 20px; border-bottom: 2px solid #e0e0e0; border-left: 4px solid #ffc107; margin-bottom: 20px;';
 
             // Додаємо назву файлу як заголовок витягу
             let content = `<div style="font-size: 1.2em; color: #0066cc; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${file.file_name}</div>`;
-
-            // Отримуємо батьківські параграфи для контексту
-
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                let parentParagraphs = [];
-
-                if (isPersonalFile) {
-                    // Для файлів "особовий" шукаємо батьківський параграф з §
-                    for (let i = match.position - 1; i >= 0; i--) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        if (paragraph.startsWith('§')) {
-                            parentParagraphs = [paragraph];
-                            break;
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    parentParagraphs = getParentParagraphs(file.all_paragraphs, match.position);
-                }
-
-                // Додаємо батьківські параграфи (жирні в режимі "Повний документ")
-                if (parentParagraphs.length > 0) {
-                    parentParagraphs.forEach((parentText) => {
-                        // Всі батьківські параграфи жирні
-                        let style = "color: #444; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-
-                        if (isPersonalFile && parentText.startsWith('§')) {
-                            // Стиль для § параграфів в особових файлах
-                            style = "color: #0066cc; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                        } else if (parentText.match(/^\d+\.\s+/)) {
-                            // Перевіряємо чи це параграф першого рівня з особливими фразами
-                            if (parentText.includes("Вважати такими, що прибули")) {
-                                style = "color: #cc0000; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            } else if (parentText.includes("Вважати такими, що вибули")) {
-                                style = "color: #009900; font-size: 0.95em; margin-bottom: 8px; font-weight: bold; line-height: 1.4;";
-                            }
-                        }
-
-                        content += `<div style="${style}">${parentText}</div>`;
-                    });
-
-                    // Перевіряємо чи потрібно додати параграф з "видати"/"зарахувати" після останнього батьківського параграфу
-                    if (file.all_paragraphs && parentParagraphs.length > 0) {
-                        const lastParentText = parentParagraphs[parentParagraphs.length - 1];
-
-                        // Шукаємо позицію останнього батьківського параграфу
-                        for (let i = match.position - 1; i >= 0; i--) {
-                            const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                            if (paragraph === lastParentText) {
-                                // Знайшли останній батьківський параграф на позиції i
-                                // Перевіряємо що йде після нього (i+1)
-                                if (i + 1 < file.all_paragraphs.length && i + 1 < match.position) {
-                                    const nextParagraph = getParagraphText(file.all_paragraphs[i + 1]).trim();
-                                    const nextLower = nextParagraph.toLowerCase();
-                                    if (nextLower.startsWith('видати') || nextLower.startsWith('зарахувати')) {
-                                        // Додаємо параграф з "видати"/"зарахувати"
-                                        content += '<div style="color: #555; line-height: 1.4; margin-top: 5px; margin-bottom: 8px;">' +
-                                                  nextParagraph.replace(/\n/g, '<br>') + '</div>';
-                                    }
-                                }
-                                break; // Знайшли, більше не шукаємо
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Основний текст збігу (знайдений фрагмент)
-            content += `<div style="margin-bottom: 10px; line-height: 1.4;">${highlightText(match.context, query).replace(/\n/g, '<br>')}</div>`;
-            
-            // Додаємо додаткові параграфи до підстави або до § для файлів "особовий"
-            if (file.all_paragraphs && Array.isArray(file.all_paragraphs)) {
-                let additionalParagraphs = [];
-                let basisParagraph = null;
-                
-                // Перевіряємо чи це файл "особовий"
-                const isPersonalFile = file.file_name.toLowerCase().startsWith('особовий');
-                
-                if (isPersonalFile) {
-                    // Логіка для файлів "особовий": витягуємо до знака § (але § не показуємо)
-                    // Якщо зустрічається заборонений параграф - блокуємо всі наступні в цьому розділі
-                    let isBlocked = false;
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
-                        if (paragraph.startsWith('§')) {
-                            // Знайшли наступний § - зупиняємось
-                            break;
-                        } else if (paragraph.length > 0) {
-                            if (!isBlocked) {
-                                // Перевіряємо чи цей параграф потрібно блокувати (заборонені слова або нумерація)
-                                if (shouldBlockParagraphInPersonalFile(paragraph)) {
-                                    // Блокуємо цей та всі наступні параграфи в розділі
-                                    isBlocked = true;
-                                } else {
-                                    // Додаємо параграф, якщо він не заборонений
-                                    additionalParagraphs.push(paragraph);
-                                }
-                            }
-                            // Якщо isBlocked = true, пропускаємо всі наступні параграфи
-                        }
-                    }
-                } else {
-                    // Стандартна логіка для звичайних файлів
-                    const currentText = match.context.trim();
-                    const sectionMatch = currentText.match(/^(\d+(\.\d+)*)\./);
-                    let sectionPrefix = '';
-                    
-                    if (sectionMatch) {
-                        sectionPrefix = sectionMatch[1].split('.')[0]; // Беремо перший номер (наприклад "25" з "25.1.194")
-                    }
-                    
-                    // Шукаємо параграфи після основного тексту
-                    for (let i = match.position + 1; i < file.all_paragraphs.length; i++) {
-                        const paragraph = getParagraphText(file.all_paragraphs[i]).trim();
-                        
-                        if (paragraph.toLowerCase().startsWith('підстава')) {
-                            // Знайшли підставу
-                            basisParagraph = paragraph;
-                            break;
-                        } else if (paragraph.match(/^\d+\./)) {
-                            // Це новий розділ першого рівня
-                            const newSectionMatch = paragraph.match(/^(\d+)\./);
-                            if (newSectionMatch && sectionPrefix && newSectionMatch[1] !== sectionPrefix) {
-                                // Новий розділ з іншим номером - зупиняємось
-                                break;
-                            } else if (paragraph.match(/^\d+(\.\d+)+\./)) {
-                                // Це підрозділ того ж розділу - пропускаємо (не додаємо)
-                                continue;
-                            }
-                        } else if (paragraph.length > 0) {
-                            // Це звичайний текст - додаємо
-                            additionalParagraphs.push(paragraph);
-                        }
-                    }
-                }
-                
-                // Додаємо всі знайдені додаткові параграфи
-                additionalParagraphs.forEach(p => {
-                    content += '<div style="color: #555; line-height: 1.4; margin-top: 5px;">' + 
-                              p.replace(/\n/g, '<br>') + '</div>';
-                });
-                
-                // Додаємо підставу якщо знайшли (тільки для звичайних файлів, не особових)
-                if (basisParagraph && !isPersonalFile) {
-                    content += '<div style="font-style: italic; color: #666; line-height: 1.4;">' + 
-                              basisParagraph.replace(/\n/g, '<br>') + '</div>';
-                }
-            }
+            content += buildExtractContent(file, match, query);
 
             extractSection.innerHTML = content;
 
@@ -1621,7 +1257,6 @@ function selectFile(fileIndex, query) {
             }
 
             documentContent.appendChild(extractSection);
-            paragraphCount++;
         });
     }
 
