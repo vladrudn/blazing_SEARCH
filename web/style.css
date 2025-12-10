@@ -117,9 +117,18 @@ body {
     color: #495057;
 }
 
-.toggle-option input[type="radio"]:checked + span {
+.toggle-option input[type="radio"]:checked + span,
+.toggle-option input[type="radio"]:checked + img {
     color: #667eea;
     font-weight: 600;
+    opacity: 1;
+}
+
+.view-mode-icon {
+    width: 20px;
+    height: 20px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
 }
 
 .toggle-option:has(input[type="radio"]:checked) {
