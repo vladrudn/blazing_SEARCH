@@ -503,7 +503,6 @@ async function performSearch() {
         return;
     }
 
-    searchInput.value = removeApostrophes(query);
     showLoader();
     clearResults();
     hideError();
