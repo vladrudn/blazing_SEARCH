@@ -8,8 +8,9 @@ const processingTime = document.getElementById('processing-time');
 const infoPanel = document.getElementById('info-panel');
 const loader = document.getElementById('loader');
 const errorMessage = document.getElementById('error-message');
-const folderPathContainer = document.getElementById('folder-path-container');
-const folderPathInput = document.getElementById('folder-path-input');
+
+// Дефолтний шлях для пошуку файлів
+const DEFAULT_FOLDER_PATH = '\\\\salem\\Documents\\ФОТО ВК';
 
 // Helper функція для отримання тексту параграфа (підтримка старого і нового формату)
 function getParagraphText(paragraphData) {
@@ -411,12 +412,10 @@ window.addEventListener('load', () => {
             const currentQuery = searchInput.value.trim();
             const newMode = getCurrentViewMode();
 
-            // Показуємо/приховуємо поле шляху до папки
+            // Оновлюємо плейсхолдер в залежності від режиму
             if (newMode === 'file-search') {
-                folderPathContainer.style.display = 'block';
                 searchInput.placeholder = 'Введіть назву файлу або частину назви...';
             } else {
-                folderPathContainer.style.display = 'none';
                 searchInput.placeholder = 'Введіть текст для пошуку (мінімум 3 символи)...';
             }
 
@@ -593,11 +592,7 @@ async function performFileSearch(query) {
         return;
     }
 
-    const folderPath = folderPathInput.value.trim();
-    if (!folderPath) {
-        showError('Введіть шлях до папки');
-        return;
-    }
+    const folderPath = DEFAULT_FOLDER_PATH;
 
     showLoader();
     clearResults();
