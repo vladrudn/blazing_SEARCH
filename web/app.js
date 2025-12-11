@@ -381,6 +381,8 @@ window.addEventListener('load', () => {
     // Обробник для Enter в полі пошуку
     searchInput.addEventListener('keyup', (event) => {
         if (event.key === 'Enter') {
+            // Перетворюємо на нижній регістр
+            searchInput.value = searchInput.value.toLowerCase();
             handleInputProcess(searchInput);
             performSearch();
         }
@@ -391,11 +393,11 @@ window.addEventListener('load', () => {
         this.select();
     });
 
-    // Обробка вставки тексту - дозволяємо браузерне автозаповнення
+    // Обробка вставки тексту - перетворюємо на нижній регістр
     searchInput.addEventListener('paste', function(e) {
-        // Не перешкоджаємо браузерному paste, це дозволяє зберігати автозаповнення
-        // Обробка вставленого тексту відбудеться через input event
         setTimeout(() => {
+            // Перетворюємо на нижній регістр
+            searchInput.value = searchInput.value.toLowerCase();
             // Обробляємо введений текст після вставки
             if (searchInput.value.trim().length >= 3) {
                 performSearch();
