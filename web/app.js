@@ -695,7 +695,16 @@ function showFilePreview(file) {
         <div class="file-preview-container">
             <div class="preview-header">
                 <h3>${file.name}</h3>
-                <button class="open-file-btn" onclick="openFileDirectly('${file.path.replace(/\\/g, '\\\\')}')">Відкрити файл</button>
+                <div class="preview-actions">
+                    <button class="preview-btn" onclick="downloadFile('${file.path.replace(/\\/g, '\\\\')}', '${file.name}')" title="Завантажити файл">⬇️</button>
+    `;
+
+    if (isImage || isPdf) {
+        previewHTML += `<button class="preview-btn" onclick="openFullscreenPreview('${encodedPath}', '${isImage ? 'image' : 'pdf'}', '${file.name}')" title="На весь екран">+</button>`;
+    }
+
+    previewHTML += `
+                </div>
             </div>
     `;
 
@@ -1734,4 +1743,242 @@ function hideLazyLoadingIndicator() {
     if (indicator) {
         indicator.classList.add('hidden');
     }
+}
+
+// Функція для завантаження файлу користувачем
+async function downloadFile(filePath, fileName) {
+    try {
+        const encodedPath = encodeURIComponent(filePath);
+        const response = await fetch(`/api/file-preview/${encodedPath}`);
+
+        if (!response.ok) {
+            console.error('❌ Помилка завантаження файлу');
+            showToast('Помилка завантаження файлу', 'error');
+            return;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        showToast(`✅ Файл ${fileName} завантажено`, 'success');
+    } catch (error) {
+        console.error('❌ Помилка завантаження файлу:', error);
+        showToast('Помилка завантаження файлу', 'error');
+    }
+}
+
+// Функція для відкриття повноекранного попереду з приближенням
+function openFullscreenPreview(encodedPath, fileType, fileName) {
+    // Створюємо modal
+    const modal = document.createElement('div');
+    modal.id = 'fullscreen-preview-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.95);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        right: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 8px;
+        z-index: 10001;
+        color: white;
+    `;
+
+    const title = document.createElement('span');
+    title.textContent = fileName;
+    title.style.cssText = 'font-size: 16px; font-weight: 600; flex: 1;';
+    toolbar.appendChild(title);
+
+    let zoomLevel = 100;
+    const zoomInfo = document.createElement('span');
+    zoomInfo.textContent = `${zoomLevel}%`;
+    zoomInfo.style.cssText = 'margin: 0 15px; font-size: 14px; min-width: 50px; text-align: center;';
+    toolbar.appendChild(zoomInfo);
+
+    // Кнопки керування
+    const buttonStyle = `
+        background-color: transparent;
+        color: white;
+        border: 1px solid white;
+        padding: 8px 12px;
+        margin: 0 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    `;
+
+    // Кнопка мінус (зменшення)
+    const minusBtn = document.createElement('button');
+    minusBtn.textContent = '−';
+    minusBtn.style.cssText = buttonStyle;
+    minusBtn.title = 'Зменшити';
+    toolbar.appendChild(minusBtn);
+
+    // Кнопка плюс (збільшення)
+    const plusBtn = document.createElement('button');
+    plusBtn.textContent = '+';
+    plusBtn.style.cssText = buttonStyle;
+    plusBtn.title = 'Збільшити';
+    toolbar.appendChild(plusBtn);
+
+    // Кнопка закриття
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = buttonStyle + 'margin-left: 15px;';
+    closeBtn.title = 'Закрити (Esc)';
+    toolbar.appendChild(closeBtn);
+
+    document.body.appendChild(toolbar);
+
+    // Контент
+    const contentContainer = document.createElement('div');
+    contentContainer.style.cssText = `
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        margin-top: 80px;
+    `;
+
+    if (fileType === 'image') {
+        const img = document.createElement('img');
+        img.src = `/api/file-preview/${encodedPath}`;
+        img.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: transform 0.2s ease;
+            cursor: grab;
+            transform: scale(${zoomLevel / 100});
+        `;
+        img.id = 'fullscreen-image';
+
+        contentContainer.appendChild(img);
+
+        // Обробники приближення
+        minusBtn.addEventListener('click', () => {
+            zoomLevel = Math.max(25, zoomLevel - 10);
+            img.style.transform = `scale(${zoomLevel / 100})`;
+            zoomInfo.textContent = `${zoomLevel}%`;
+        });
+
+        plusBtn.addEventListener('click', () => {
+            zoomLevel = Math.min(300, zoomLevel + 10);
+            img.style.transform = `scale(${zoomLevel / 100})`;
+            zoomInfo.textContent = `${zoomLevel}%`;
+        });
+
+        // Колесо миші для приближення
+        contentContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                zoomLevel = Math.min(300, zoomLevel + 10);
+            } else {
+                zoomLevel = Math.max(25, zoomLevel - 10);
+            }
+            img.style.transform = `scale(${zoomLevel / 100})`;
+            zoomInfo.textContent = `${zoomLevel}%`;
+        });
+    } else if (fileType === 'pdf') {
+        const embed = document.createElement('embed');
+        embed.src = `/api/file-preview/${encodedPath}`;
+        embed.type = 'application/pdf';
+        embed.style.cssText = `
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+        `;
+        contentContainer.appendChild(embed);
+
+        // PDF не підтримує приближення в embed, але ховаємо кнопки
+        minusBtn.style.display = 'none';
+        plusBtn.style.display = 'none';
+        zoomInfo.textContent = 'PDF';
+    }
+
+    modal.appendChild(contentContainer);
+    document.body.appendChild(modal);
+
+    // Обробники закриття
+    const closeModal = () => {
+        modal.remove();
+        toolbar.remove();
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+
+    // Закриття на Esc
+    const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            document.removeEventListener('keydown', handleEsc);
+        }
+    };
+    document.addEventListener('keydown', handleEsc);
+
+    // Закриття при кліку на фон
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+            document.removeEventListener('keydown', handleEsc);
+        }
+    });
+}
+
+// Вспомагає функція для показу toast повідомлень
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 12px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
 }
