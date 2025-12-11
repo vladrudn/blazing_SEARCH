@@ -1,6 +1,6 @@
 use actix_web::{web, App, HttpServer, Result, HttpResponse, middleware::Logger};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::process::Command;
 use crate::search_engine::{SearchEngine, SearchMode};
 use crate::auto_indexer::AutoIndexer;
@@ -27,7 +27,7 @@ pub struct SearchFilesRequest {
     pub folder_path: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct FileInfo {
     pub name: String,
     pub path: String,
@@ -38,6 +38,12 @@ pub struct SearchFilesResponse {
     pub files: Vec<FileInfo>,
     pub count: usize,
     pub processing_time_ms: u128,
+}
+
+#[derive(Serialize)]
+pub struct FileIndexResponse {
+    pub files: Vec<FileInfo>,
+    pub total_count: usize,
 }
 
 #[derive(Serialize)]
@@ -80,6 +86,7 @@ pub struct ErrorResponse {
 
 pub struct AppState {
     pub search_engine: Arc<SearchEngine>,
+    pub file_index_cache: Arc<Mutex<Vec<FileInfo>>>,
 }
 
 // Функція для отримання локальної IP-адреси
@@ -89,6 +96,38 @@ fn get_local_ip() -> Option<String> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("8.8.8.8:80").ok()?;
     socket.local_addr().ok().map(|addr| addr.ip().to_string())
+}
+
+// Функція для побудови індексу файлів у папці
+fn build_file_index(folder_path: &str) -> Vec<FileInfo> {
+    const MAX_DEPTH: usize = 10;
+
+    let path = std::path::Path::new(folder_path);
+    if !path.exists() || !path.is_dir() {
+        println!("⚠️  Папка не знайдена: {}", folder_path);
+        return Vec::new();
+    }
+
+    println!("🔍 Побудова індексу файлів у: {}", folder_path);
+
+    // Паралельно збираємо всі файли
+    let files: Vec<FileInfo> = WalkDir::new(path)
+        .max_depth(MAX_DEPTH)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .par_bridge()
+        .filter_map(|entry| {
+            entry.file_name().to_str().map(|file_name| FileInfo {
+                name: file_name.to_string(),
+                path: entry.path().to_string_lossy().to_string(),
+            })
+        })
+        .collect();
+
+    println!("✅ Індекс побудовано: {} файлів", files.len());
+    files
 }
 
 pub async fn search_handler(
@@ -232,7 +271,20 @@ pub async fn open_file_handler(
     }
 }
 
+// Новий handler для отримання кешованого індексу файлів
+pub async fn get_file_index_handler(
+    data: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let cached_files = data.file_index_cache.lock().unwrap();
+    let response = FileIndexResponse {
+        total_count: cached_files.len(),
+        files: cached_files.clone(),
+    };
+    Ok(HttpResponse::Ok().json(response))
+}
+
 pub async fn search_files_handler(
+    data: web::Data<AppState>,
     request: web::Json<SearchFilesRequest>,
 ) -> Result<HttpResponse> {
     let start_time = std::time::Instant::now();
@@ -243,49 +295,16 @@ pub async fn search_files_handler(
         }));
     }
 
-    if request.folder_path.trim().is_empty() {
-        return Ok(HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Не вказано шлях до папки".to_string(),
-        }));
-    }
-
-    let folder_path = std::path::Path::new(&request.folder_path);
-
-    // Перевіряємо чи існує папка
-    if !folder_path.exists() || !folder_path.is_dir() {
-        return Ok(HttpResponse::NotFound().json(ErrorResponse {
-            error: "Папка не знайдена або шлях неправильний".to_string(),
-        }));
-    }
-
+    // Використовуємо кешований індекс замість проходження по папці
+    let cached_files = data.file_index_cache.lock().unwrap();
     let query_lower = request.query.to_lowercase();
     const MAX_RESULTS: usize = 200; // Обмежуємо кількість результатів
-    const MAX_DEPTH: usize = 10; // Обмежуємо глибину рекурсії
 
-    // Збираємо всі шляхи файлів спочатку (швидко)
-    let all_entries: Vec<_> = WalkDir::new(folder_path)
-        .max_depth(MAX_DEPTH)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .collect();
-
-    // Паралельна фільтрація файлів за запитом
-    let mut found_files: Vec<FileInfo> = all_entries
+    // Шукаємо у кешованому індексі (дуже швидко)
+    let mut found_files: Vec<FileInfo> = cached_files
         .par_iter()
-        .filter_map(|entry| {
-            entry.file_name().to_str().and_then(|file_name| {
-                if file_name.to_lowercase().contains(&query_lower) {
-                    Some(FileInfo {
-                        name: file_name.to_string(),
-                        path: entry.path().to_string_lossy().to_string(),
-                    })
-                } else {
-                    None
-                }
-            })
-        })
+        .filter(|file| file.name.to_lowercase().contains(&query_lower))
+        .cloned()
         .collect();
 
     // Обмежуємо кількість результатів
@@ -306,8 +325,14 @@ pub async fn search_files_handler(
 pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()> {
     let search_engine_arc = Arc::new(search_engine);
 
+    // Побудова індексу файлів при старті
+    const DEFAULT_FOLDER_PATH: &str = "\\\\salem\\Documents\\ФОТО ВК";
+    let file_index = build_file_index(DEFAULT_FOLDER_PATH);
+    let file_index_cache = Arc::new(Mutex::new(file_index));
+
     let app_state = web::Data::new(AppState {
         search_engine: search_engine_arc.clone(),
+        file_index_cache: file_index_cache.clone(),
     });
 
     // Запускаємо автоматичний індексер
@@ -331,6 +356,7 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
             .wrap(Logger::default())
             .route("/", web::get().to(index_handler))
             .route("/api/search", web::post().to(search_handler))
+            .route("/api/file-index", web::get().to(get_file_index_handler))
             .route("/api/search-files", web::post().to(search_files_handler))
             .route("/api/open-file", web::post().to(open_file_handler))
             .route("/static/{filename:.*}", web::get().to(static_handler))

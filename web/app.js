@@ -12,9 +12,49 @@ const errorMessage = document.getElementById('error-message');
 // Дефолтний шлях для пошуку файлів
 const DEFAULT_FOLDER_PATH = '\\\\salem\\Documents\\ФОТО ВК';
 
+// Глобальний кеш індексу файлів
+let fileIndexCache = [];
+let isIndexLoaded = false;
+
 // Helper функція для отримання тексту параграфа (підтримка старого і нового формату)
 function getParagraphText(paragraphData) {
     return typeof paragraphData === 'string' ? paragraphData : paragraphData.text;
+}
+
+// Завантаження індексу файлів при старті
+async function loadFileIndex() {
+    try {
+        console.log('📥 Завантаження індексу файлів...');
+        const response = await fetch('/api/file-index');
+
+        if (!response.ok) {
+            console.error('❌ Помилка завантаження індексу');
+            return;
+        }
+
+        const data = await response.json();
+        fileIndexCache = data.files || [];
+        isIndexLoaded = true;
+
+        console.log(`✅ Індекс завантажено: ${fileIndexCache.length} файлів`);
+    } catch (error) {
+        console.error('❌ Помилка завантаження індексу файлів:', error);
+    }
+}
+
+// Локальний пошук у кешованому індексі (дуже швидко)
+function searchInCachedIndex(query) {
+    const queryLower = query.toLowerCase();
+    const start = Date.now();
+
+    const results = fileIndexCache.filter(file =>
+        file.name.toLowerCase().includes(queryLower)
+    );
+
+    const duration = Date.now() - start;
+    console.log(`⚡ Локальний пошук виконаний за ${duration}мс`);
+
+    return results;
 }
 
 // Клас для копіювання шляхів файлів у буфер обміну
@@ -378,7 +418,10 @@ document.addEventListener('copy', (event) => {
 });
 
 // Ініціалізація при завантаженні сторінки
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+    // Завантажуємо індекс файлів при старті
+    await loadFileIndex();
+
     // Обробник для Enter в полі пошуку
     searchInput.addEventListener('keyup', (event) => {
         if (event.key === 'Enter') {
@@ -592,34 +635,27 @@ async function performFileSearch(query) {
         return;
     }
 
-    const folderPath = DEFAULT_FOLDER_PATH;
-
     showLoader();
     clearResults();
     hideError();
 
     try {
-        const response = await fetch('/api/search-files', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                query: query.toLowerCase(),
-                folder_path: folderPath
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.status}`);
+        // Якщо індекс ще не завантажено, спочатку завантажимо його
+        if (!isIndexLoaded) {
+            await loadFileIndex();
         }
 
-        const result = await response.json();
+        // Виконуємо локальний пошук у кешованому індексі (дуже швидко)
+        const start = Date.now();
+        const foundFiles = searchInCachedIndex(query);
+        const processingTime = Date.now() - start;
 
-        if (result.error) {
-            showError(result.error);
-            return;
-        }
+        // Формуємо результат у форматі SearchFilesResponse
+        const result = {
+            files: foundFiles,
+            count: foundFiles.length,
+            processing_time_ms: processingTime
+        };
 
         displayFileSearchResults(result);
 
