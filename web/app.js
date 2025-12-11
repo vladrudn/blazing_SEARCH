@@ -682,11 +682,13 @@ function showFilePreview(file) {
     const fileName = file.name.toLowerCase();
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
     const pdfExtensions = ['.pdf'];
+    const docExtensions = ['.doc', '.docx'];
 
     // Визначаємо розширення файлу
     const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
     const isImage = imageExtensions.includes(ext);
     const isPdf = pdfExtensions.includes(ext);
+    const isDoc = docExtensions.includes(ext);
 
     // Кодуємо шлях для URL
     const encodedPath = encodeURIComponent(file.path);
@@ -696,12 +698,16 @@ function showFilePreview(file) {
             <div class="preview-header">
                 <h3>${file.name}</h3>
                 <div class="preview-actions">
-                    <button class="preview-btn" onclick="downloadFile('${file.path.replace(/\\/g, '\\\\')}', '${file.name}')" title="Завантажити файл">⬇️</button>
     `;
 
-    if (isImage || isPdf) {
-        previewHTML += `<button class="preview-btn" onclick="openFullscreenPreview('${encodedPath}', '${isImage ? 'image' : 'pdf'}', '${file.name}')" title="На весь екран">+</button>`;
+    if (isImage || isPdf || isDoc) {
+        const displayType = isImage ? 'image' : isDoc ? 'doc' : 'pdf';
+        previewHTML += `<button class="preview-btn" onclick="openFullscreenPreview('${encodedPath}', '${displayType}', '${file.name}')" title="На весь екран">+</button>`;
     }
+
+    previewHTML += `
+                    <button class="preview-btn" onclick="downloadFile('${file.path.replace(/\\/g, '\\\\')}', '${file.name}')" title="Завантажити файл">⬇️</button>
+    `;
 
     previewHTML += `
                 </div>
@@ -715,8 +721,8 @@ function showFilePreview(file) {
                 <img src="/api/file-preview/${encodedPath}" alt="${file.name}" style="max-width: 100%; max-height: 500px; object-fit: contain;">
             </div>
         `;
-    } else if (isPdf) {
-        // Показуємо embed для PDF через API
+    } else if (isPdf || isDoc) {
+        // Показуємо embed для PDF або конвертованого .doc файлу через API
         previewHTML += `
             <div class="pdf-preview">
                 <embed src="/api/file-preview/${encodedPath}" type="application/pdf" width="100%" height="600">
@@ -1909,7 +1915,7 @@ function openFullscreenPreview(encodedPath, fileType, fileName) {
             img.style.transform = `scale(${zoomLevel / 100})`;
             zoomInfo.textContent = `${zoomLevel}%`;
         });
-    } else if (fileType === 'pdf') {
+    } else if (fileType === 'pdf' || fileType === 'doc') {
         const embed = document.createElement('embed');
         embed.src = `/api/file-preview/${encodedPath}`;
         embed.type = 'application/pdf';
@@ -1921,10 +1927,10 @@ function openFullscreenPreview(encodedPath, fileType, fileName) {
         `;
         contentContainer.appendChild(embed);
 
-        // PDF не підтримує приближення в embed, але ховаємо кнопки
+        // PDF/DOC не підтримує приближення в embed, але ховаємо кнопки
         minusBtn.style.display = 'none';
         plusBtn.style.display = 'none';
-        zoomInfo.textContent = 'PDF';
+        zoomInfo.textContent = fileType === 'doc' ? 'ДОКУМЕНТ' : 'PDF';
     }
 
     modal.appendChild(contentContainer);

@@ -671,14 +671,15 @@ body {
     padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 24px;
     font-weight: 500;
     transition: all 0.2s ease;
-    min-width: 40px;
-    height: 40px;
+    min-width: 50px;
+    height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
 }
 
 .preview-btn:hover {

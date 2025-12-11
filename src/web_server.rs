@@ -302,15 +302,20 @@ pub async fn get_file_preview_handler(
         }));
     }
 
+    // Визначаємо тип контенту за розширенням
+    let ext = path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // Обробка документів (конвертація в PDF)
+    if ext == "doc" || ext == "docx" {
+        return convert_doc_to_pdf(&decoded_path).await;
+    }
+
     // Читаємо вміст файлу
     match std::fs::read(&decoded_path) {
         Ok(content) => {
-            // Визначаємо тип контенту за розширенням
-            let ext = path.extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-
             let content_type = match ext.as_str() {
                 "jpg" | "jpeg" => "image/jpeg",
                 "png" => "image/png",
@@ -331,6 +336,81 @@ pub async fn get_file_preview_handler(
             }))
         }
     }
+}
+
+// Функція для конвертації .doc/.docx у PDF
+async fn convert_doc_to_pdf(file_path: &str) -> Result<HttpResponse> {
+    use std::process::Command;
+    use std::path::PathBuf;
+
+    let input_path = PathBuf::from(file_path);
+    let temp_dir = std::env::temp_dir();
+    let file_name = input_path.file_stem()
+        .and_then(|n| n.to_str())
+        .unwrap_or("document");
+
+    // Список можливих шляхів до LibreOffice на Windows
+    let possible_paths = vec![
+        "soffice",
+        "soffice.exe",
+        "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+        "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
+    ];
+
+    // Спробуємо кожен можливий шлях
+    for libreoffice_path in possible_paths {
+        let cmd_result = if cfg!(target_os = "windows") {
+            Command::new(libreoffice_path)
+                .args(&[
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", temp_dir.to_str().unwrap_or("."),
+                    file_path
+                ])
+                .output()
+        } else {
+            Command::new(libreoffice_path)
+                .args(&[
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", temp_dir.to_str().unwrap_or("."),
+                    file_path
+                ])
+                .output()
+        };
+
+        if let Ok(output) = cmd_result {
+            if output.status.success() {
+                // Шукаємо згенерований PDF файл
+                let expected_pdf = temp_dir.join(format!("{}.pdf", file_name));
+                if expected_pdf.exists() {
+                    match std::fs::read(&expected_pdf) {
+                        Ok(content) => {
+                            // Видаляємо тимчасовий файл після читання
+                            let _ = std::fs::remove_file(&expected_pdf);
+                            println!("✅ Документ успішно конвертовано: {}", file_path);
+                            return Ok(HttpResponse::Ok()
+                                .content_type("application/pdf")
+                                .body(content));
+                        }
+                        Err(_) => {
+                            println!("⚠️  Помилка читання конвертованого PDF");
+                        }
+                    }
+                }
+            } else {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                println!("⚠️  Помилка конвертації: {}", error_msg);
+            }
+        }
+    }
+
+    println!("⚠️  LibreOffice не знайдено у жодному зі стандартних місць");
+
+    // Якщо конвертація не вдалася, повертаємо помилку
+    Ok(HttpResponse::InternalServerError().json(ErrorResponse {
+        error: "Не вдалося конвертувати документ у PDF. Переконайтеся, що LibreOffice встановлено.".to_string(),
+    }))
 }
 
 pub async fn search_files_handler(
