@@ -390,6 +390,24 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
     let auto_indexer = AutoIndexer::new(search_engine_arc);
     auto_indexer.start_background_indexing().await;
 
+    // Запускаємо автоматичне оновлення індексу файлів кожні 3 хвилини
+    println!("🚀 Запуск оновлення індексу файлів (кожні 3 хвилини)...");
+    let file_index_cache_clone = file_index_cache.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(180)).await; // 3 хвилини
+
+            println!("🔄 Оновлення індексу файлів...");
+            let updated_index = build_file_index(DEFAULT_FOLDER_PATH);
+
+            // Оновлюємо кеш
+            if let Ok(mut cache) = file_index_cache_clone.lock() {
+                *cache = updated_index;
+                println!("✅ Індекс файлів оновлено");
+            }
+        }
+    });
+
     println!("Запуск веб-сервера на http://0.0.0.0:8080");
 
     // Виводимо актуальну локальну IP-адресу
