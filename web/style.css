@@ -571,3 +571,89 @@ body {
     background-color: #e3f2fd;
     border-left: 4px solid #1976d2;
 }
+
+/* Стилі для превью файлів */
+.file-preview-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 20px;
+    background-color: #fff;
+    overflow-y: auto;
+}
+
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e1e5e9;
+}
+
+.preview-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 1.3em;
+    word-break: break-word;
+    flex: 1;
+}
+
+.image-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f5f7fa;
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 300px;
+    overflow: auto;
+}
+
+.image-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-preview {
+    flex: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #f5f7fa;
+    border: 1px solid #e1e5e9;
+}
+
+.file-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #f5f7fa;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+}
+
+.file-info p {
+    margin: 10px 0;
+    color: #666;
+    line-height: 1.6;
+}
+
+.file-info code {
+    display: block;
+    background-color: white;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 10px;
+    word-break: break-all;
+    font-size: 12px;
+    border: 1px solid #e1e5e9;
+    max-width: 100%;
+    overflow-x: auto;
+}

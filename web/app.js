@@ -454,6 +454,7 @@ window.addEventListener('load', async () => {
         radio.addEventListener('change', () => {
             const currentQuery = searchInput.value.trim();
             const newMode = getCurrentViewMode();
+            const oldMode = getCurrentViewMode(); // Отримуємо поточний режим до зміни
 
             // Оновлюємо плейсхолдер в залежності від режиму
             if (newMode === 'file-search') {
@@ -462,27 +463,37 @@ window.addEventListener('load', async () => {
                 searchInput.placeholder = 'Введіть текст для пошуку (мінімум 3 символи)...';
             }
 
-            if (displayedResults.length > 0 && currentQuery) {
+            // Якщо є запит, виконуємо пошук у новому режимі
+            if (currentQuery) {
                 if (newMode === 'fragments') {
-                    // Переключились на режим Витяг - показуємо всі витяги
-                    showAllExtracts(currentQuery);
-
-                    // Якщо ще не всі результати завантажені, запускаємо повний пошук
-                    if (displayedResults.length < totalCount) {
-                        performFullSearch(currentQuery);
+                    // Переключились на режим Витяг
+                    if (displayedResults.length > 0) {
+                        // Якщо у нас вже є результати, просто показуємо витяги
+                        showAllExtracts(currentQuery);
+                        // Якщо ще не всі результати завантажені, запускаємо повний пошук
+                        if (displayedResults.length < totalCount) {
+                            performFullSearch(currentQuery);
+                        }
+                    } else {
+                        // Якщо результатів немає (наприклад, були у режимі file-search), виконуємо новий пошук
+                        performSearch();
                     }
                 } else if (newMode === 'full-document') {
-                    // Переключились на режим Повний документ - показуємо перший файл
-                    if (activeFileIndex >= 0) {
-                        selectFile(activeFileIndex, currentQuery);
+                    // Переключились на режим Повний документ
+                    if (displayedResults.length > 0) {
+                        // Якщо у нас вже є результати, показуємо перший файл
+                        if (activeFileIndex >= 0) {
+                            selectFile(activeFileIndex, currentQuery);
+                        } else {
+                            selectFile(0, currentQuery);
+                        }
                     } else {
-                        selectFile(0, currentQuery);
+                        // Якщо результатів немає (наприклад, були у режимі file-search), виконуємо новий пошук
+                        performSearch();
                     }
                 } else if (newMode === 'file-search') {
                     // Переключились на режим Пошук по файлам - виконуємо пошук файлів
-                    if (currentQuery) {
-                        performFileSearch(currentQuery);
-                    }
+                    performFileSearch(currentQuery);
                 }
             }
         });
@@ -666,6 +677,57 @@ async function performFileSearch(query) {
     }
 }
 
+// Функція для показу превью файлу
+function showFilePreview(file) {
+    const fileName = file.name.toLowerCase();
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+    const pdfExtensions = ['.pdf'];
+
+    // Визначаємо розширення файлу
+    const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+    const isImage = imageExtensions.includes(ext);
+    const isPdf = pdfExtensions.includes(ext);
+
+    // Кодуємо шлях для URL
+    const encodedPath = encodeURIComponent(file.path);
+
+    let previewHTML = `
+        <div class="file-preview-container">
+            <div class="preview-header">
+                <h3>${file.name}</h3>
+                <button class="open-file-btn" onclick="openFileDirectly('${file.path.replace(/\\/g, '\\\\')}')">Відкрити файл</button>
+            </div>
+    `;
+
+    if (isImage) {
+        // Показуємо зображення через API
+        previewHTML += `
+            <div class="image-preview">
+                <img src="/api/file-preview/${encodedPath}" alt="${file.name}" style="max-width: 100%; max-height: 500px; object-fit: contain;">
+            </div>
+        `;
+    } else if (isPdf) {
+        // Показуємо embed для PDF через API
+        previewHTML += `
+            <div class="pdf-preview">
+                <embed src="/api/file-preview/${encodedPath}" type="application/pdf" width="100%" height="600">
+            </div>
+        `;
+    } else {
+        // Для інших файлів показуємо інформацію
+        previewHTML += `
+            <div class="file-info">
+                <p><strong>Тип файлу:</strong> ${ext.substring(1).toUpperCase()}</p>
+                <p><strong>Повний шлях:</strong><br><code>${file.path}</code></p>
+                <p class="hint">Попередній перегляд недоступний для цього типу файлу</p>
+            </div>
+        `;
+    }
+
+    previewHTML += `</div>`;
+    documentPreview.innerHTML = previewHTML;
+}
+
 // Функція для відображення результатів пошуку файлів
 function displayFileSearchResults(result) {
     const { files, count, processing_time_ms } = result;
@@ -708,7 +770,7 @@ function displayFileSearchResults(result) {
             await openFileDirectly(file.path);
         });
 
-        // Обробник одинарного кліку для показу шляху
+        // Обробник одинарного кліку для показу превью
         fileElement.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -721,16 +783,8 @@ function displayFileSearchResults(result) {
             // Виділити поточний файл
             fileElement.classList.add('active');
 
-            // Показати шлях файлу в preview
-            documentPreview.innerHTML = `
-                <div class="file-path-display">
-                    <h3>Інформація про файл</h3>
-                    <p><strong>Назва:</strong> ${file.name}</p>
-                    <p><strong>Повний шлях:</strong> ${file.path}</p>
-                    <button class="open-file-btn" onclick="openFileDirectly('${file.path.replace(/\\/g, '\\\\')}')">Відкрити файл</button>
-                    <p class="hint">Подвійний клік на файлі також відкриває його</p>
-                </div>
-            `;
+            // Показати превью файлу
+            showFilePreview(file);
         });
 
         fragment.appendChild(fileElement);
@@ -739,7 +793,14 @@ function displayFileSearchResults(result) {
     filesList.appendChild(fragment);
 
     // Показуємо підказку в preview
-    documentPreview.innerHTML = '<div class="file-path-display"><p class="hint">Оберіть файл зі списку для перегляду деталей або двічі клікніть для відкриття</p></div>';
+    documentPreview.innerHTML = `
+        <div class="file-preview-container" style="justify-content: center; align-items: center;">
+            <div style="text-align: center; color: #999;">
+                <p style="font-size: 18px; margin-bottom: 10px;">📁 Оберіть файл зі списку</p>
+                <p class="hint">Клік - для перегляду, Подвійний клік - для відкриття</p>
+            </div>
+        </div>
+    `;
 }
 
 // Відображення результатів

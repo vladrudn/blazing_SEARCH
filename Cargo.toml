@@ -17,3 +17,4 @@ mime_guess = "2.0.5"
 chrono = { version = "0.4", features = ["serde"] }
 fs4 = "0.9"
 rayon = "1.10"
+urlencoding = "2.1"

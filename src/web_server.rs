@@ -283,6 +283,56 @@ pub async fn get_file_index_handler(
     Ok(HttpResponse::Ok().json(response))
 }
 
+// Handler для отримання вмісту файлу для превью
+pub async fn get_file_preview_handler(
+    path: web::Path<String>,
+) -> Result<HttpResponse> {
+    let file_path = path.into_inner();
+
+    // Декодуємо URL-кодовану шлях
+    let decoded_path = urlencoding::decode(&file_path)
+        .map(|p| p.to_string())
+        .unwrap_or_else(|_| file_path);
+
+    // Перевіряємо чи файл існує
+    let path = std::path::Path::new(&decoded_path);
+    if !path.exists() || !path.is_file() {
+        return Ok(HttpResponse::NotFound().json(ErrorResponse {
+            error: "Файл не знайдено".to_string(),
+        }));
+    }
+
+    // Читаємо вміст файлу
+    match std::fs::read(&decoded_path) {
+        Ok(content) => {
+            // Визначаємо тип контенту за розширенням
+            let ext = path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            let content_type = match ext.as_str() {
+                "jpg" | "jpeg" => "image/jpeg",
+                "png" => "image/png",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                "bmp" => "image/bmp",
+                "pdf" => "application/pdf",
+                _ => "application/octet-stream",
+            };
+
+            Ok(HttpResponse::Ok()
+                .content_type(content_type)
+                .body(content))
+        }
+        Err(_) => {
+            Ok(HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Помилка читання файлу".to_string(),
+            }))
+        }
+    }
+}
+
 pub async fn search_files_handler(
     data: web::Data<AppState>,
     request: web::Json<SearchFilesRequest>,
@@ -357,6 +407,7 @@ pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()
             .route("/", web::get().to(index_handler))
             .route("/api/search", web::post().to(search_handler))
             .route("/api/file-index", web::get().to(get_file_index_handler))
+            .route("/api/file-preview/{path:.*}", web::get().to(get_file_preview_handler))
             .route("/api/search-files", web::post().to(search_files_handler))
             .route("/api/open-file", web::post().to(open_file_handler))
             .route("/static/{filename:.*}", web::get().to(static_handler))
