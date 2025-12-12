@@ -443,6 +443,7 @@ window.addEventListener('load', async () => {
             // Перетворюємо на нижній регістр
             searchInput.value = searchInput.value.toLowerCase();
             // Обробляємо введений текст після вставки
+            handleInputProcess(searchInput);
             if (searchInput.value.trim().length >= 3) {
                 performSearch();
             }
