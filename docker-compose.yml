@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  blazing-search:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount the SMB share - this needs to be adjusted based on where it's mounted on the host
+      # For example, if the SMB share is accessible on the host at /run/user/1000/gvfs/smb-share:server=salem,share=documents
+      # you would mount it like this (adjust the path as needed):
+      # - /host/path/to/smb/share:/mnt/smb-share:ro
+      - ./nakazi_cache:/app/nakazi_cache
+      - ./documents_index.json:/app/documents_index.json
+      - ./inverted_index.json:/app/inverted_index.json
+      # Mount custom config if needed
+      - ./config.toml:/app/config.toml
+    environment:
+      - RUST_BACKTRACE=1
+    restart: unless-stopped
+    # Note: Accessing SMB shares from inside Docker containers can be complex.
+    # The easiest approach is to mount the SMB share on the host system first,
+    # then bind mount it into the container.
