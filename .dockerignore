@@ -1,0 +1,14 @@
+target/
+.git/
+.gitignore
+*.md
+*.toml
+!config.toml
+!config.example.toml
+*.rs.bk
+*.swp
+*.tmp
+.DS_Store
+node_modules/
+npm-debug.log
+Cargo.lock
