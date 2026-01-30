@@ -10,7 +10,7 @@ const loader = document.getElementById('loader');
 const errorMessage = document.getElementById('error-message');
 
 // Дефолтний шлях для пошуку файлів
-const DEFAULT_FOLDER_PATH = '\\\\salem\\Documents\\ФОТО ВК';
+const DEFAULT_FOLDER_PATH = '/mnt/salem-documents/ФОТО ВК';
 
 // Глобальний кеш індексу файлів
 let fileIndexCache = [];
