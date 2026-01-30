@@ -16,7 +16,7 @@ pub struct AutoIndexer {
 impl AutoIndexer {
     pub fn new(search_engine: Arc<SearchEngine>) -> Self {
         Self {
-            folder_path: "\\\\salem\\Documents\\Накази".to_string(),
+            folder_path: "/mnt/salem-documents/Накази".to_string(),
             // folder_path: "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\".to_string(),
             local_cache_path: "./nakazi_cache".to_string(),
             index_file_path: "documents_index.json".to_string(),

@@ -16,6 +16,9 @@ Thumbs.db
 *.json
 *.atomic_temp
 nakazi_cache/
+/documents_index.json
+/inverted_index.json
+/config.toml
 
 # Logs
 *.log

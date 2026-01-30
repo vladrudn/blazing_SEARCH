@@ -72,7 +72,7 @@ async fn start_web_mode() {
         }
     } else {
         println!("❌ Не вдалося створити індекс");
-        println!("💡 Перевірте доступ до мережевої папки \\\\salem\\Documents\\Накази");
+        println!("💡 Перевірте доступ до мережевої папки /mnt/salem-documents/Накази");
         return;
     }
 
@@ -91,7 +91,7 @@ async fn start_cli_mode() {
 }
 
 async fn perform_initial_indexing() {
-    let remote_folder = "\\\\salem\\Documents\\Накази";
+    let remote_folder = "/mnt/salem-documents/Накази";
     // let remote_folder = "C:\\Users\\vladr\\Desktop\\НАКАЗИ\\";
     let local_cache = "./nakazi_cache";
     let documents_index_path = "documents_index.json";
