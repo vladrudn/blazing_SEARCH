@@ -451,12 +451,11 @@ pub async fn search_files_handler(
     Ok(HttpResponse::Ok().json(response))
 }
 
-
 pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()> {
     let search_engine_arc = Arc::new(search_engine);
 
     // Побудова індексу файлів при старті
-    const DEFAULT_FOLDER_PATH: &str = "\\\\salem\\Documents\\ФОТО ВК";
+    const DEFAULT_FOLDER_PATH: &str = "/mnt/salem-documents/ФОТО ВК";
     let file_index = build_file_index(DEFAULT_FOLDER_PATH);
     let file_index_cache = Arc::new(Mutex::new(file_index));
 
