@@ -451,6 +451,7 @@ pub async fn search_files_handler(
     Ok(HttpResponse::Ok().json(response))
 }
 
+
 pub async fn start_web_server(search_engine: SearchEngine) -> std::io::Result<()> {
     let search_engine_arc = Arc::new(search_engine);
 
