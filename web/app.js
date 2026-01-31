@@ -1373,11 +1373,11 @@ function selectFile(fileIndex, query) {
 
     documentPreview.appendChild(documentContent);
 
-    // Прокрутити до першого збігу
+    // Прокрутити до першого збігу без анімації
     if (firstMatchElement) {
         setTimeout(() => {
             firstMatchElement.scrollIntoView({
-                behavior: 'smooth',
+                behavior: 'auto',
                 block: 'center'
             });
         }, 100);
